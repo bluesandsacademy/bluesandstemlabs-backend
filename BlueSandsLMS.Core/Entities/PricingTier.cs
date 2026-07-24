@@ -5,8 +5,8 @@ namespace BlueSandsLMS.Core.Entities
     public class PricingTier : BaseEntity
     {
         public string TierName { get; set; } = "";
-        public int MinStudents { get; set; }      // inclusive
-        public int MaxStudents { get; set; }      // inclusive
-        public decimal PricePerStudent { get; set; } // NGN
+        public int MinStudents { get; set; }
+        public int MaxStudents { get; set; }
+        public decimal PricePerStudent { get; set; }
     }
 }

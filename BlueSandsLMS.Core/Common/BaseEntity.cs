@@ -1,12 +1,14 @@
+using System;
+using System.ComponentModel.DataAnnotations;
+
 namespace BlueSandsLMS.Core.Common
 {
-    /// <summary>
-    /// Minimal base: Id + created/modified timestamps (UTC).
-    /// </summary>
+
     public abstract class BaseEntity
     {
-        public long Id { get; set; }                 // EF identity column
-        public DateTime DateCreated { get; set; }    // set on insert
-        public DateTime DateModified { get; set; }   // set on insert/update
+        [Key] public Guid Id { get; set; } = Guid.NewGuid();
+        public DateTime DateCreated { get; set; }  = DateTime.UtcNow;
+        public DateTime DateModified { get; set; } = DateTime.UtcNow;
+        public bool IsDeleted { get; set; } = false;
     }
 }

@@ -6,7 +6,7 @@ namespace BlueSandsLMS.Application.Services.Infrastructure
     public interface ICacheInvalidator
     {
         void BustSchool(Guid schoolId);
-        void BustSchoolScope(Guid schoolId, string scope); // e.g. "trends", "billing"
+        void BustSchoolScope(Guid schoolId, string scope);
     }
 
     public sealed class CacheInvalidator : ICacheInvalidator
@@ -14,7 +14,7 @@ namespace BlueSandsLMS.Application.Services.Infrastructure
         private readonly IMemoryCache _cache;
         public CacheInvalidator(IMemoryCache cache) => _cache = cache;
 
-        // Keys used by SchoolAdmin V2 service
+
         private static string Overview(Guid s) => $"sa:overview:{s}";
         private static string Scope(Guid s, string scope) => $"sa:{scope}:{s}";
 

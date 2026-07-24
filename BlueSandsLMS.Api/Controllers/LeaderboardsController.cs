@@ -40,7 +40,7 @@ namespace BlueSandsLMS.Api.Controllers
             var me = UserId();
             var role = Role();
 
-            // Basic access gate: must be enrolled (Student/Teacher) or be SchoolAdmin for that school
+
             var myEnrollment = await _db.Enrollments
                 .AnyAsync(e => e.ClassroomId == classId && e.UserId == me);
 

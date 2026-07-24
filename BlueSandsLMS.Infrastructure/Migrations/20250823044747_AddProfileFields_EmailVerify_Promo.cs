@@ -5,10 +5,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace BlueSandsLMS.Infrastructure.Migrations
 {
-    /// <inheritdoc />
+
     public partial class AddProfileFields_EmailVerify_Promo : Migration
     {
-        /// <inheritdoc />
+
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AlterColumn<string>(
@@ -135,7 +135,7 @@ namespace BlueSandsLMS.Infrastructure.Migrations
                 unique: true);
         }
 
-        /// <inheritdoc />
+
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

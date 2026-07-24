@@ -7,18 +7,18 @@ namespace BlueSandsLMS.Core.Entities
     public class Payment : BaseEntity
     {
         public Guid SchoolId { get; set; }
-        public Guid? UserId { get; set; }              // initiator (optional)
+        public Guid? UserId { get; set; }
         public string Provider { get; set; } = "paystack";
-        public string Reference { get; set; } = "";    // our ref: BS-...
+        public string Reference { get; set; } = "";
         public string Currency { get; set; } = "NGN";
-        public long AmountKobo { get; set; }           // Paystack expects kobo
-        public decimal Subtotal { get; set; }          // NGN
-        public decimal Vat { get; set; }               // NGN
-        public decimal Total { get; set; }             // NGN
+        public long AmountKobo { get; set; }
+        public decimal Subtotal { get; set; }
+        public decimal Vat { get; set; }
+        public decimal Total { get; set; }
         public int StudentsBilled { get; set; }
         public decimal PricePerStudent { get; set; }
-        public string? PromoCode { get; set; }         // e.g., "ABJ EDTECH 2025"
+        public string? PromoCode { get; set; }
         public PaymentStatus Status { get; set; } = PaymentStatus.Pending;
-        public string RawResponse { get; set; } = "";  // audit JSON
+        public string RawResponse { get; set; } = "";
     }
 }

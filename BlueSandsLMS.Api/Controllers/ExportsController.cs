@@ -4,6 +4,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using BlueSandsLMS.Common.Interfaces;
+using System.Threading;
 
 namespace BlueSandsLMS.Api.Controllers
 {
@@ -15,6 +16,12 @@ namespace BlueSandsLMS.Api.Controllers
         private readonly IExportService _exports;
         public ExportsController(IExportService exports) => _exports = exports;
 
+        private Guid CurrentUserId()
+        {
+            var sub = User.FindFirstValue("sub") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+            return Guid.Parse(sub!);
+        }
+
         private string Role() => User.FindFirstValue(ClaimTypes.Role) ?? "";
         private Guid? SchoolIdClaim()
         {
@@ -25,7 +32,7 @@ namespace BlueSandsLMS.Api.Controllers
         [HttpGet("gradebook")]
         public async Task<IActionResult> Gradebook([FromQuery] Guid classId)
         {
-            // Teachers of class or SchoolAdmins/Admins can export; (fine-grained check can be added later)
+
             var csv = await _exports.ExportGradebookCsvAsync(classId);
             return File(csv, "text/csv", $"gradebook-{classId}.csv");
         }
@@ -50,6 +57,21 @@ namespace BlueSandsLMS.Api.Controllers
 
             var csv = await _exports.ExportUsersCsvAsync(schoolId.Value);
             return File(csv, "text/csv", $"users-{schoolId}.csv");
+        }
+
+
+        [HttpGet("engagement")]
+        [Authorize(Roles = "Teacher,SchoolAdmin,GlobalAdmin")]
+        public async Task<IActionResult> Engagement(
+            [FromQuery] Guid? classroomId = null,
+            [FromQuery] DateTime? fromUtc = null,
+            [FromQuery] DateTime? toUtc = null,
+            CancellationToken ct = default)
+        {
+            var from = fromUtc ?? DateTime.UtcNow.AddDays(-30);
+            var to   = toUtc   ?? DateTime.UtcNow;
+            var csv  = await _exports.ExportEngagementCsvAsync(CurrentUserId(), classroomId, from, to);
+            return File(csv, "text/csv", $"engagement-{CurrentUserId()}-{from:yyyyMMdd}-{to:yyyyMMdd}.csv");
         }
 
         [HttpGet("activity")]

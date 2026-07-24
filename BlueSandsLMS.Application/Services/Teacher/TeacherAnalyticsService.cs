@@ -11,25 +11,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BlueSandsLMS.Application.Services.Teacher
 {
-    /// <summary>
-    /// Teacher analytics service
-    ///
-    /// NOTE: Out-of-scope (requires additional tables/modules):
-    /// - Communication metrics (messages sent/received): needs messages table/log.
-    /// - Discussion forum activity: needs forum/posts tables to compute participation.
-    /// - Teacher community, profile & settings, subscription details: separate modules, not analytics.
-    /// - Device/Browser usage: placeholders only; needs telemetry/heartbeat with user agents.
-    /// - Lesson completion per classroom: current LessonProgress has no ClassroomId; lesson rates here are global per-student.
-    ///   If you add ClassroomId to LessonProgress (or link lessons to class), we’ll scope those queries fast.
-    /// </summary>
+
     public sealed class TeacherAnalyticsService : ITeacherAnalyticsService
     {
         private readonly BlueSandsLMSDbContext _db;
         public TeacherAnalyticsService(BlueSandsLMSDbContext db) => _db = db;
 
-        // ------------------------------
-        // Compiled queries (EF Core version here returns IEnumerable<T>)
-        // ------------------------------
+
         private static readonly Func<BlueSandsLMSDbContext, Guid, IEnumerable<Guid>> _qTeacherClassrooms =
             EF.CompileQuery((BlueSandsLMSDbContext db, Guid teacherId) =>
                 db.Set<Enrollment>()
@@ -85,13 +73,19 @@ namespace BlueSandsLMS.Application.Services.Teacher
                   .AsNoTracking()
                   .Where(u => userIds.Contains(u.Id)));
 
-        // ------------------------------
-        // Helpers
-        // ------------------------------
+
         private async Task<Guid[]> GetTeacherClassrooms(Guid teacherId, Guid? classroomId, CancellationToken ct)
         {
-            var all = _qTeacherClassrooms(_db, teacherId).ToArray();
-            await Task.CompletedTask; // keep async signature
+
+            var fromEnrollments = _qTeacherClassrooms(_db, teacherId).ToList();
+
+            var fromAssignment = await _db.ClassroomTeachers
+                .AsNoTracking()
+                .Where(ctr => ctr.TeacherUserId == teacherId)
+                .Select(ctr => ctr.ClassroomId)
+                .ToListAsync(ct);
+
+            var all = fromEnrollments.Union(fromAssignment).Distinct().ToArray();
             if (classroomId is Guid cid) return all.Contains(cid) ? new[] { cid } : Array.Empty<Guid>();
             return all;
         }
@@ -107,7 +101,7 @@ namespace BlueSandsLMS.Application.Services.Teacher
             return pairs.ToDictionary(x => x.Id, x => x.FullName ?? "");
         }
 
-        // ---------------- Overview ----------------
+
         public async Task<TeacherOverviewDto> OverviewAsync(Guid teacherId, Guid? classroomId, string? subject, DateTime from, DateTime to, CancellationToken ct)
         {
             var classIds = await GetTeacherClassrooms(teacherId, classroomId, ct);
@@ -140,7 +134,7 @@ namespace BlueSandsLMS.Application.Services.Teacher
                 .Select(x => (int?)x.DurationSec)
                 .Sum() ?? 0;
 
-            // Global lesson completion (LessonProgress has no ClassroomId)
+
             var startedLessons = await _db.Set<LessonProgress>().AsNoTracking()
                 .Where(lp => lp.StartedAt >= start30d && lp.StartedAt <= to)
                 .CountAsync(ct);
@@ -184,7 +178,7 @@ namespace BlueSandsLMS.Application.Services.Teacher
             };
         }
 
-        // ---------------- Engagement ----------------
+
         public async Task<TeacherEngagementDto> EngagementAsync(Guid teacherId, Guid? classroomId, string? subject, DateTime from, DateTime to, CancellationToken ct)
         {
             var classIds = await GetTeacherClassrooms(teacherId, classroomId, ct);
@@ -207,7 +201,7 @@ namespace BlueSandsLMS.Application.Services.Teacher
             foreach (var q in quizzes.GroupBy(x => x.UserId))
                 interactionsByStudent[q.Key] = (interactionsByStudent.TryGetValue(q.Key, out var c) ? c : 0) + q.Count();
 
-            // Lesson completion rate per student (global — no classroom key on LessonProgress)
+
             var lpStarted = await _db.Set<LessonProgress>().AsNoTracking()
                 .Where(lp => lp.StartedAt >= from && lp.StartedAt <= to)
                 .GroupBy(lp => lp.UserId)
@@ -254,7 +248,7 @@ namespace BlueSandsLMS.Application.Services.Teacher
             };
         }
 
-        // ---------------- Performance ----------------
+
         public async Task<TeacherPerformanceDto> PerformanceAsync(Guid teacherId, Guid? classroomId, string? subject, DateTime from, DateTime to, CancellationToken ct)
         {
             var classIds = await GetTeacherClassrooms(teacherId, classroomId, ct);
@@ -330,7 +324,7 @@ namespace BlueSandsLMS.Application.Services.Teacher
             };
         }
 
-        // ---------------- Assignments ----------------
+
         public async Task<TeacherAssignmentsDto> AssignmentsAsync(Guid teacherId, Guid? classroomId, string? subject, DateTime from, DateTime to, CancellationToken ct)
         {
             var classIds = await GetTeacherClassrooms(teacherId, classroomId, ct);
@@ -396,7 +390,7 @@ namespace BlueSandsLMS.Application.Services.Teacher
             };
         }
 
-        // ---------------- Attendance (approx) ----------------
+
         public async Task<TeacherAttendanceDto> AttendanceAsync(Guid teacherId, Guid? classroomId, string? subject, DateTime from, DateTime to, CancellationToken ct)
         {
             var classIds = await GetTeacherClassrooms(teacherId, classroomId, ct);

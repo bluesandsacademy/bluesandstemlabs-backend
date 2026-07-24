@@ -9,7 +9,13 @@ namespace BlueSandsLMS.Common.DTOs.Student
         int RankClass,
         int RankSchool,
         string Greeting,
-        IReadOnlyList<string> Recommendations);
+        IReadOnlyList<string> Recommendations)
+    {
+
+        public int QuizzesAttempted { get; init; }
+        public int QuizzesPassed { get; init; }
+        public DateTime? MostRecentAttemptDate { get; init; }
+    }
 
     public record StudentAttemptDto(
         Guid AttemptId,
@@ -26,8 +32,22 @@ namespace BlueSandsLMS.Common.DTOs.Student
         string Mode,
         int LastStep,
         DateTime StartedAt,
-        DateTime? EndedAt);
+        DateTime? EndedAt)
+    {
+
+        public bool Completed { get; init; }
+        public int DurationMinutes { get; init; }
+    }
 
     public record StudentBadgeDto(string Code, string Name, string? Description, DateTime AwardedAt);
     public record StudentLeaderboardEntry(Guid UserId, string Name, double ScorePercent);
+
+
+    public record StudentAssessmentSummaryDto(
+        int QuizzesAttempted,
+        int QuizzesPassed,
+        double AvgQuizScorePercent,
+        DateTime? MostRecentQuizDate,
+        int IlsAssessmentsCompleted,
+        double AvgIlsScorePercent);
 }

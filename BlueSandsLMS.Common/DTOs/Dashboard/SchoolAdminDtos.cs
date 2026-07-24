@@ -1,81 +1,108 @@
+using System;
+using System.Collections.Generic;
+
 namespace BlueSandsLMS.Common.DTOs.Dashboard
 {
     public record SchoolOverviewDto(
-        TotalsDto Totals,
-        SubscriptionCardDto Subscription,
-        BillingCardDto Billing,
-        LicenseUtilizationDto License,
-        VerificationDto Verification,
-        Usage7dDto LoginFrequency7d);
+        Guid SchoolId,
+        string SchoolName,
+        int TotalStudents,
+        int TotalTeachers,
+        int ActiveClasses,
+        int ExperimentsRunThisTerm,
+        int ExperimentsRunAllTime,
+        double AvgStudentCompletionRate,
+        double AvgStudentScore,
+        int WeeklyActiveUsers,
+        int MonthlyActiveUsers,
+        int TotalIlsCreated
+    );
 
-    public record TotalsDto(int ActiveTeachers, int ActiveStudents, int Experiments, int Quizzes, int NewRegistrations30d);
+    public record LeaderboardEntry(
+        Guid StudentId,
+        string StudentName,
+        string? ClassName,
+        int Points,
+        int Rank
+    );
 
-    public record SubscriptionCardDto(bool IsActive, string Tier, int Seats, DateTimeOffset? EndsAt, int DaysRemaining);
+    public record ClassroomSummary(
+        Guid ClassroomId,
+        string ClassroomName,
+        int StudentCount,
+        int CompletedExperiments,
+        double AvgScore,
+        int WeeklyActive
+    );
 
-    // Amounts in KOBO (aligns with Paystack)
-    public record BillingCardDto(long? LastPaymentAmount, DateTimeOffset? LastPaymentAt, string Status, string? Promo);
+    public record ClassroomDetail(
+        Guid ClassroomId,
+        string ClassroomName,
+        IReadOnlyList<StudentRow> Students
+    );
 
-    public record LicenseUtilizationDto(int Allocated, int Used, double Percent);
-    public record VerificationDto(int Verified, int Unverified, double RatePercent);
-    public record Usage7dDto(IReadOnlyList<int> DailyActiveUsers);
+    public record StudentRow(
+        Guid StudentId,
+        string StudentName,
+        string? Email,
+        int Completed,
+        double AvgScore,
+        DateTimeOffset? LastActiveAt
+    );
 
-    public record TrendsDto(TrendSeries Series);
-    public record TrendSeries(
-        IReadOnlyList<DateCount> DailyNewUsers,
-        IReadOnlyList<DateAmount> DailyPayments,
-        IReadOnlyList<DateCount> DailyExperiments,
-        IReadOnlyList<DateCount> DailyAssignments);
+    public record TeacherSummary(
+        Guid TeacherId,
+        string TeacherName,
+        string? Email,
+        int ClassesHandled,
+        int ExperimentsAssigned,
+        double AvgClassCompletionRate,
+        DateTimeOffset? LastActiveAt
+    );
 
-    public record DateCount(DateOnly Date, int Count);
-    public record DateAmount(DateOnly Date, long Amount);
+    public record ExperimentUsage(
+        Guid ExperimentId,
+        string ExperimentTitle,
+        int Runs,
+        double AvgScore,
+        TimeSpan AvgDuration
+    );
 
-    public record PerformanceDto(
-        double OverallAverageScore,
-        double PassRatePercent,
-        IReadOnlyList<SubjectScore> SubjectTrends,
-        IReadOnlyList<ClassScore> ClassAverages);
-
-    public record SubjectScore(string Subject, double Average, int Samples);
-    public record ClassScore(Guid ClassroomId, string ClassName, double Average, int Samples);
-
-    public record TeacherActivityDto(
-        IReadOnlyList<TeacherAssignments> AssignmentsCreated,
-        TimeSpan? AvgFeedbackTurnaround,
-        IReadOnlyList<TeacherEngagement> EngagementScores);
-
-    public record TeacherAssignments(Guid TeacherId, string TeacherName, int Assignments);
-    public record TeacherEngagement(Guid TeacherId, string TeacherName, int Score);
-
-    public record ExperimentsCoursesDto(
-        int ExperimentsTotal,
-        IReadOnlyList<ClassCompletionRate> CompletionRates,
-        double ResourceUsagePercent,
-        IReadOnlyList<ResourcePopularity> CoursePopularity);
-
-    public record ClassCompletionRate(Guid ClassroomId, string ClassName, double CompletionPercent, int Participants);
-    public record ResourcePopularity(string CourseOrModule, int Views);
-
-    public record SystemMetricsDto(
-        IReadOnlyList<HourCount> PeakUsageTimes,
-        IReadOnlyList<NameCount> DeviceBreakdown,
-        IReadOnlyList<NameCount> BrowserBreakdown,
-        IReadOnlyList<DateCount> DowntimeOrErrorEvents);
-
-    public record HourCount(int Hour, int Count);
-    public record NameCount(string Name, int Count);
-
-    public record LeaderboardDto(
-        IReadOnlyList<StudentRank> TopStudents,
-        IReadOnlyList<TeacherRank> TopTeachers,
-        IReadOnlyList<SchoolRank>? RegionalCompare);
-
-    public record StudentRank(Guid UserId, string Name, double Score, int Rank);
-    public record TeacherRank(Guid UserId, string Name, int Activities, int Rank);
     public record SchoolRank(Guid SchoolId, string SchoolName, double Score, int Rank);
 
-    public record BillingDto(SubscriptionCardDto Subscription, IReadOnlyList<PaymentRow> RecentPayments);
-    public record PaymentRow(long Id, long Amount, string Status, DateTimeOffset? PaidAt, string? Reference, string? Promo);
+    public record BillingDto(SubscriptionCardDto Subscription, IReadOnlyList<PaymentRow> RecentPayments)
+    {
+
+        public IReadOnlyList<BlueSandsLMS.Common.DTOs.TierSummaryDto> AvailableTiers { get; init; }
+            = Array.Empty<BlueSandsLMS.Common.DTOs.TierSummaryDto>();
+    }
+
+
+    public record PaymentRow(
+        Guid Id,
+        long Amount,
+        string Status,
+        DateTimeOffset? PaidAt,
+        string? Reference,
+        string? Promo
+    )
+    {
+
+        public string Currency { get; init; } = "NGN";
+        public string? Method { get; init; }
+    }
+
+    public record SubscriptionCardDto(
+        string PlanName,
+        string Status,
+        DateTimeOffset? StartDate,
+        DateTimeOffset? EndDate,
+        int Seats,
+        int SeatsUsed,
+        string? RenewalMode
+    );
 
     public record CreateUserRequest(string FullName, string Email, string Role, Guid? ClassroomId);
+
     public record BulkUploadResult(int Created, int Updated, int Failed, IReadOnlyList<string> Errors);
 }

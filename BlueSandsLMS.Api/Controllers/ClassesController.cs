@@ -53,6 +53,29 @@ namespace BlueSandsLMS.Api.Controllers
             return NoContent();
         }
 
+        
+        [HttpGet("school")]
+        public async Task<IActionResult> BySchool([FromQuery] Guid? schoolId)
+        {
+            var claimSchool = RequireSchoolId();
+            Guid actualSchool;
+
+            if (schoolId.HasValue && schoolId.Value != claimSchool)
+            {
+
+                if (!User.IsInRole("SchoolAdmin"))
+                    return Forbid();
+                actualSchool = schoolId.Value;
+            }
+            else
+            {
+                actualSchool = claimSchool;
+            }
+
+            var list = await _repo.GetClassesBySchoolIdAsync(actualSchool);
+            return Ok(list.ToArray());
+        }
+
         [HttpPost("{id:guid}/enroll")]
         public async Task<IActionResult> Enroll(Guid id, [FromBody] EnrollByEmailDto dto)
         {

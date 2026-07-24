@@ -9,7 +9,7 @@ namespace BlueSandsLMS.Common.Interfaces
         Task UpdateAsync(Guid id, string title, string body);
         Task DeleteAsync(Guid id);
 
-        // Guard helper
+
         Task<Guid?> GetClassroomIdAsync(Guid announcementId);
     }
 }

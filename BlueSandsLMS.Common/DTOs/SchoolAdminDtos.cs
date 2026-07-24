@@ -10,4 +10,6 @@ namespace BlueSandsLMS.Common.DTOs
     public record BulkUpsertStudentsDto(List<UpsertStudentDto> Students);
 
     public record UpsertResultDto(string Email, string Action, Guid UserId, string Role, Guid SchoolId);
+
+    public record AssignRoleDto(string Role);
 }

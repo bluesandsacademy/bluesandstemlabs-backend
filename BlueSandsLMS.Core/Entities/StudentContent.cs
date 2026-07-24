@@ -33,7 +33,7 @@ namespace BlueSandsLMS.Core.Entities
     public Guid UserId { get; set; }
     public Guid LessonId { get; set; }
 
-    // NEW
+
     public Guid? ClassroomId { get; set; }
 
     public DateTime StartedAt { get; set; } = DateTime.UtcNow;
@@ -42,7 +42,7 @@ namespace BlueSandsLMS.Core.Entities
     public User? User { get; set; }
     public Lesson? Lesson { get; set; }
 
-    // NEW
+
     public Classroom? Classroom { get; set; }
 }
 

@@ -1,3 +1,4 @@
+
 using System;
 using System.Linq;
 using System.Threading.Tasks;
@@ -10,7 +11,8 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace BlueSandsLMS.Application.Services
 {
-    public class LeaderboardService : ILeaderboardService
+
+    public partial class LeaderboardService : ILeaderboardService
     {
         private readonly BlueSandsLMSDbContext _db;
         private readonly IMemoryCache _cache;
@@ -52,18 +54,18 @@ namespace BlueSandsLMS.Application.Services
 
             var userIds = await userQuery.Distinct().ToListAsync();
 
-            // Metric projections
+
             IQueryable<(Guid UserId, decimal Score)> metricQuery = metric.ToLower() switch
             {
-              "quiz" => (
-    from q in _db.QuizAttempts
-    where userIds.Contains(q.UserId) && q.CompletedAt != null
-    group q by q.UserId into g
-    select new ValueTuple<Guid, decimal>(
-        g.Key,
-        (g.Average(x => (decimal?)x.Score0to1) ?? 0m) * 100m
-    )
-),
+                "quiz" => (
+                    from q in _db.QuizAttempts
+                    where userIds.Contains(q.UserId) && q.CompletedAt != null
+                    group q by q.UserId into g
+                    select new ValueTuple<Guid, decimal>(
+                        g.Key,
+                        (g.Average(x => (decimal?)x.Score0to1) ?? 0m) * 100m
+                    )
+                ),
 
                 "experiments" => (
                     from e in _db.ExperimentLaunches
@@ -71,23 +73,29 @@ namespace BlueSandsLMS.Application.Services
                     group e by e.UserId into g
                     select new ValueTuple<Guid, decimal>(g.Key, (decimal)g.Count())
                 ),
+
                 "time" => (
                     from e in _db.ExperimentLaunches
                     where userIds.Contains(e.UserId)
                     group e by e.UserId into g
-                    select new ValueTuple<Guid, decimal>(g.Key, (decimal)g.Sum(x => (int?)x.DurationSec) / 60m) // minutes
+                    select new ValueTuple<Guid, decimal>(g.Key, (decimal)(g.Sum(x => (int?)x.DurationSec) ?? 0) / 60m)
                 ),
+
                 "badges" => (
                     from b in _db.BadgeAwards
                     where userIds.Contains(b.UserId)
                     group b by b.UserId into g
                     select new ValueTuple<Guid, decimal>(g.Key, (decimal)g.Count())
                 ),
+
                 _ => (
                     from q in _db.QuizAttempts
                     where userIds.Contains(q.UserId) && q.CompletedAt != null
                     group q by q.UserId into g
-                    select new ValueTuple<Guid, decimal>(g.Key, (decimal)g.Average(x => x.Score0to1) * 100m)
+                    select new ValueTuple<Guid, decimal>(
+                        g.Key,
+                        (g.Average(x => (decimal?)x.Score0to1) ?? 0m) * 100m
+                    )
                 )
             };
 

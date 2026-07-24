@@ -7,6 +7,9 @@ namespace BlueSandsLMS.Core.Entities
         [Key] public Guid Id { get; set; }
         public Guid UserId { get; set; }
         public Guid? ClassroomId { get; set; }
+
+public Guid? PhETSimulationId { get; set; }
+
         public string Subject { get; set; } = "";
          public string ExperimentName { get; set; } = "";
          public string Mode { get; set; } = "guided";
@@ -15,10 +18,12 @@ namespace BlueSandsLMS.Core.Entities
         public DateTime StartedAt { get; set; } = DateTime.UtcNow;
         public DateTime? EndedAt { get; set; }
          public DateTime DateCreated { get; set; } = DateTime.UtcNow;
-        public int DurationSec { get; set; } // time spent
+        public int DurationSec { get; set; }
         public bool Completed { get; set; }
 
         public Classroom? Classroom { get; set; }
+
+public PhETSimulation? PhETSimulation { get; set; }
         public User? User { get; set; }
     }
 }

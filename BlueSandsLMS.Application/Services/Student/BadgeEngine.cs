@@ -1,4 +1,4 @@
-// Application/Services/Student/BadgeEngine.cs (minimal, idempotent)
+
 using BlueSandsLMS.Core.Entities;
 using BlueSandsLMS.Infrastructure;
 using Microsoft.EntityFrameworkCore;

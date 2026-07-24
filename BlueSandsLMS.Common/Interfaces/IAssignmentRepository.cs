@@ -13,7 +13,7 @@ namespace BlueSandsLMS.Common.Interfaces
 
         Task<List<ToGradeItemDto>> GetToGradeAsync(Guid classroomId, int take, int skip);
 
-        // Ownership/guard helpers
+
         Task<Guid?> GetClassroomIdAsync(Guid assignmentId);
     }
 }

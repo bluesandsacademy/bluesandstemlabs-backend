@@ -1,4 +1,4 @@
-// BlueSandsLMS.Common.Interfaces.Teacher/ITeacherCommAnalyticsService.cs
+
 using System;
 using System.Threading;
 using System.Threading.Tasks;

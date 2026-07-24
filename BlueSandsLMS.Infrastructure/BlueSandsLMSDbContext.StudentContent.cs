@@ -5,7 +5,7 @@ using BlueSandsLMS.Core.Entities;
 
 namespace BlueSandsLMS.Infrastructure
 {
-    // Student-content tables live in this partial
+
     public partial class BlueSandsLMSDbContext
     {
         public DbSet<Subject> Subjects => Set<Subject>();

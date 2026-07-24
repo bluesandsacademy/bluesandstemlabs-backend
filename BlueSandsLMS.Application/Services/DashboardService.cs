@@ -50,24 +50,24 @@ namespace BlueSandsLMS.Application.Services
 
             var rank = new Rank(Class: 0, School: 0, National: 0);
 
-            // ----- DUES: materialize first, then map to SimpleItem in memory - FIXED
+
             var due = (await _db.Assignments
                 .Where(a => a.DueAt != null && a.DueAt >= now.AddDays(-1) && a.DueAt <= now.AddDays(7))
                 .OrderBy(a => a.DueAt)
                 .Select(a => new { a.Id, a.Title, a.DueAt })
                 .Take(6)
-                .ToListAsync()) // End async here, then continue synchronously
+                .ToListAsync())
                 .Where(a => a.DueAt.HasValue)
                 .Select(a => new SimpleItem("assignment", a.Title, a.DueAt!.Value, a.Id))
                 .ToList();
 
-            // ----- RECENT: same pattern - FIXED
+
             var recent = (await _db.ExperimentLaunches
                 .Where(e => e.UserId == userId && e.StartedAt >= monthAgo)
                 .OrderByDescending(e => e.StartedAt)
                 .Select(e => new { e.ExperimentCode, e.StartedAt })
                 .Take(6)
-                .ToListAsync()) // End async here, then continue synchronously
+                .ToListAsync())
                 .Select(e => new SimpleItem("experiment", e.ExperimentCode, e.StartedAt, null))
                 .ToList();
 
@@ -92,46 +92,64 @@ namespace BlueSandsLMS.Application.Services
             var key = $"dash:teacher:{teacherId}";
             if (_cache.TryGetValue(key, out TeacherDashboardDto? cached) && cached is not null) return cached;
 
-            var classIds = await _db.Enrollments
+
+            var idsFromEnrollments = await _db.Enrollments
+                .AsNoTracking()
                 .Where(e => e.UserId == teacherId && e.RoleInClass == Core.Entities.ClassRole.Teacher)
                 .Select(e => e.ClassroomId)
-                .Distinct()
                 .ToListAsync();
+
+            var idsFromAssignment = await _db.ClassroomTeachers
+                .AsNoTracking()
+                .Where(ct => ct.TeacherUserId == teacherId)
+                .Select(ct => ct.ClassroomId)
+                .ToListAsync();
+
+            var classIds = idsFromEnrollments.Union(idsFromAssignment).Distinct().ToList();
 
             var classes = classIds.Count;
 
             var students = await _db.Enrollments
+                .AsNoTracking()
                 .Where(e => classIds.Contains(e.ClassroomId) && e.RoleInClass == Core.Entities.ClassRole.Student)
                 .Select(e => e.UserId)
                 .Distinct()
                 .CountAsync();
 
+
             var toGrade = await _db.Submissions
-                .Where(s => s.Status == Core.Entities.SubmissionStatus.Submitted
-                         && _db.Assignments.Any(a => a.Id == s.AssignmentId && classIds.Contains(a.ClassroomId)))
+                .AsNoTracking()
+                .Where(s => s.Status == Core.Entities.SubmissionStatus.Submitted)
+                .Join(_db.Assignments.Where(a => classIds.Contains(a.ClassroomId)),
+                      s => s.AssignmentId, a => a.Id,
+                      (s, _) => s)
                 .CountAsync();
 
             var weekAgo = DateTime.UtcNow.AddDays(-7);
 
             var experiments7d = await _db.ExperimentLaunches
+                .AsNoTracking()
                 .Where(x => x.ClassroomId != null && classIds.Contains(x.ClassroomId.Value) && x.StartedAt >= weekAgo)
                 .CountAsync();
 
             var quizzes7d = await _db.QuizAttempts
+                .AsNoTracking()
                 .Where(x => x.ClassroomId != null && classIds.Contains(x.ClassroomId.Value) && x.CompletedAt >= weekAgo)
                 .CountAsync();
 
             var studentIds = await _db.Enrollments
+                .AsNoTracking()
                 .Where(e => classIds.Contains(e.ClassroomId) && e.RoleInClass == Core.Entities.ClassRole.Student)
                 .Select(e => e.UserId)
                 .Distinct()
                 .ToListAsync();
 
             var logins7d = await _db.Users
+                .AsNoTracking()
                 .Where(u => studentIds.Contains(u.Id) && u.LastLogin != null && u.LastLogin >= weekAgo)
                 .CountAsync();
 
-            // Top students: compute in DB, then DTO mapping in memory - FIXED
+
             var topStudents = (await _db.QuizAttempts
                 .Where(q => q.ClassroomId != null && classIds.Contains(q.ClassroomId.Value) && q.CompletedAt >= weekAgo)
                 .GroupBy(q => q.UserId)
@@ -143,7 +161,7 @@ namespace BlueSandsLMS.Application.Services
                 .Select(x => new TopStudent(x.FullName ?? "Student", Math.Round(x.AvgScore, 2)))
                 .ToList();
 
-            // At-risk
+
             var lastActiveDb = await _db.ExperimentLaunches
                 .Where(x => x.ClassroomId != null && classIds.Contains(x.ClassroomId.Value))
                 .GroupBy(x => x.UserId)
@@ -164,10 +182,15 @@ namespace BlueSandsLMS.Application.Services
                 .Take(5)
                 .ToList();
 
+            var totalIlsCreated = await _db.InteractiveLearningSpaces
+                .AsNoTracking()
+                .CountAsync(i => i.CreatedBy == teacherId);
+
             var dto = new TeacherDashboardDto(
                 Classes: classes,
                 Students: students,
                 ToGrade: toGrade,
+                TotalIlsCreated: totalIlsCreated,
                 TopStudents: topStudents,
                 AtRisk: atRisk,
                 Activity7d: new Activity(Logins: logins7d, Experiments: experiments7d, Quizzes: quizzes7d)
@@ -242,10 +265,11 @@ namespace BlueSandsLMS.Application.Services
 
             var totalUsers = await _db.Users.CountAsync();
             var totalSchools = await _db.Schools.CountAsync();
+            var totalIls = await _db.InteractiveLearningSpaces.CountAsync();
             var totalExperiments = await _db.ExperimentLaunches.CountAsync();
             var totalQuizAttempts = await _db.QuizAttempts.CountAsync();
 
-            var dto = new GlobalDashboardDto(totalUsers, totalSchools, totalExperiments, totalQuizAttempts);
+            var dto = new GlobalDashboardDto(totalUsers, totalSchools, totalIls, totalExperiments, totalQuizAttempts);
             _cache.Set(key, dto, TimeSpan.FromSeconds(120));
             return dto;
         }

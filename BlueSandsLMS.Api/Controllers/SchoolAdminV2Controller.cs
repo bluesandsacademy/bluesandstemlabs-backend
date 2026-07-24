@@ -4,7 +4,8 @@ using ISchoolAdminAnalytics = BlueSandsLMS.Common.Interfaces.Dashboard.ISchoolAd
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using BlueSandsLMS.Infrastructure; // BlueSandsLMSDbContext
+using BlueSandsLMS.Infrastructure;
+using BlueSandsLMS.Common.DTOs;
 
 namespace BlueSandsLMS.Api.Controllers
 {
@@ -66,5 +67,65 @@ namespace BlueSandsLMS.Api.Controllers
         [HttpGet("billing")]
         public async Task<BillingDto> Billing(CancellationToken ct)
             => await _svc.GetBillingAsync(await RequireSchoolIdAsync(ct), ct);
+
+        [HttpGet("profile")]
+        public async Task<IActionResult> Profile(CancellationToken ct)
+        {
+            var uid = User.FindFirstValue("sub") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(uid) || !Guid.TryParse(uid, out var userId))
+                return Unauthorized();
+
+            var user = await _db.Users
+                .AsNoTracking()
+                .Include(u => u.Role)
+                .FirstOrDefaultAsync(u => u.Id == userId, ct);
+
+            if (user == null) return Unauthorized();
+
+            string? schoolName = null;
+            string schoolCurrency = "NGN";
+            int totalStudents = 0;
+            string schoolCountry = string.Empty;
+
+            int? estimatedScienceStudentCount = null;
+            int? disabledStudentCount         = null;
+
+            if (user.SchoolId.HasValue)
+            {
+                var school = await _db.Schools
+                    .AsNoTracking()
+                    .Where(s => s.Id == user.SchoolId.Value)
+                    .Select(s => new
+                    {
+                        s.Name, s.Currency, s.Country, s.TotalStudents,
+                        s.EstimatedScienceStudentCount, s.DisabledStudentCount
+                    })
+                    .FirstOrDefaultAsync(ct);
+
+                schoolName                   = school?.Name;
+                schoolCurrency               = school?.Currency ?? "NGN";
+                totalStudents                = school?.TotalStudents ?? 0;
+                schoolCountry                = school?.Country ?? string.Empty;
+                estimatedScienceStudentCount = school?.EstimatedScienceStudentCount;
+                disabledStudentCount         = school?.DisabledStudentCount;
+            }
+
+            return Ok(new
+            {
+                userId         = user.Id,
+                fullName       = user.FullName,
+                email          = user.Email,
+                phone          = user.Phone,
+                country        = user.Country ?? schoolCountry,
+                role           = user.Role?.Name ?? "SchoolAdmin",
+                schoolId       = user.SchoolId,
+                schoolName,
+                schoolCurrency,
+                totalStudents,
+                estimatedScienceStudentCount,
+                disabledStudentCount,
+                isEmailVerified = user.IsEmailVerified
+            });
+        }
     }
 }

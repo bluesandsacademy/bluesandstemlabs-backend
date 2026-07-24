@@ -8,10 +8,10 @@ namespace BlueSandsLMS.Application.Services
         private readonly ILogger<EmailService> _logger;
         public EmailService(ILogger<EmailService> logger) => _logger = logger;
 
-        public Task SendAsync(string to, string subject, string htmlBody, string? from = null)
+        public Task SendAsync(string to, string subject, string htmlBody, string? fromEmail = null, string? fromName = null)
         {
             _logger.LogInformation("Email -> {To}\nSUBJECT: {Subject}\nFROM: {From}\nBODY:\n{Body}",
-                to, subject, from ?? "(default sender)", htmlBody);
+                to, subject, fromEmail ?? "(default sender)", htmlBody);
             return Task.CompletedTask;
         }
     }

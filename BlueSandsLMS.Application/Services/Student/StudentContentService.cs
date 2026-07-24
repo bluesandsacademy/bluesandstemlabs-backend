@@ -62,7 +62,7 @@ namespace BlueSandsLMS.Application.Services.Student
                     Id = Guid.NewGuid(),
                     UserId = userId,
                     LessonId = lessonId,
-                    StartedAt = now,        // ✅ was CreatedAt (doesn’t exist)
+                    StartedAt = now,
                     CompletedAt = now
                 };
                 _db.LessonProgresses.Add(progress);
@@ -74,7 +74,7 @@ namespace BlueSandsLMS.Application.Services.Student
 
             await _db.SaveChangesAsync(ct);
 
-            // If user finished all lessons in the subject → issue certificate
+
             var subjectCode = lesson.SubjectCode;
             var total = await _db.Lessons.CountAsync(l => l.SubjectCode == subjectCode && l.IsActive, ct);
             var done  = await _db.LessonProgresses
@@ -107,7 +107,7 @@ namespace BlueSandsLMS.Application.Services.Student
             return await _db.Certificates
                 .Where(c => c.UserId == userId)
                 .OrderByDescending(c => c.IssuedAt)
-                // If your entity has no IssuedBy column, provide a default label
+
                 .Select(c => new CertificateDto(c.Id, c.Title, c.SubjectCode, c.IssuedAt, "Blue Sands LMS"))
                 .ToListAsync(ct);
         }

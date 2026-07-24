@@ -31,7 +31,7 @@ namespace BlueSandsLMS.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateAnnouncementDto dto)
         {
-            // Teacher must own the class; SchoolAdmin allowed by policy (same school scope could be added)
+
             if (User.IsInRole("Teacher"))
             {
                 if (!await _classRepo.UserIsTeacherAsync(dto.ClassroomId, UserId())) return Forbid();

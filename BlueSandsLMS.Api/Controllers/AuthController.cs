@@ -1,11 +1,12 @@
 using System;
-using System.Net; // <- for WebUtility.UrlEncode
+using System.Net;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using BlueSandsLMS.Api.Infrastructure;
 using BlueSandsLMS.Common.DTOs;
 using BlueSandsLMS.Common.Interfaces;
 using BlueSandsLMS.Infrastructure;
@@ -27,20 +28,23 @@ namespace BlueSandsLMS.Api.Controllers
             _config = config;
         }
 
-        // -------------------------
-        // Public student self-registration
-        // -------------------------
+        private IActionResult Error(int statusCode, string code, string message)
+        {
+            return StatusCode(statusCode, ApiErrorFactory.Create(statusCode, code, message));
+        }
+
+
         [HttpPost("register")]
         [AllowAnonymous]
         public async Task<IActionResult> Register([FromBody] RegisterUserDto dto)
         {
-            try { return Ok(await _auth.RegisterAsync(dto)); }
+            var origin = Request.Headers["Origin"].FirstOrDefault();
+            try { return Ok(await _auth.RegisterAsync(dto, origin)); }
+            catch (UserAlreadyExistsException ex) { return Error(StatusCodes.Status409Conflict, "USER_EXISTS", ex.Message); }
             catch (Exception ex) { return BadRequest(new { message = ex.Message }); }
         }
 
-        // -------------------------
-        // Public login
-        // -------------------------
+
         [HttpPost("login")]
         [AllowAnonymous]
         public async Task<IActionResult> Login([FromBody] LoginDto dto)
@@ -49,47 +53,148 @@ namespace BlueSandsLMS.Api.Controllers
             catch (Exception ex) { return Unauthorized(new { message = ex.Message }); }
         }
 
-        // -------------------------
-        // Public school admin registration
-        // -------------------------
-        [HttpPost("register/school")]
+        [HttpPost("login/teacher")]
         [AllowAnonymous]
-        public async Task<IActionResult> RegisterSchool([FromBody] RegisterSchoolDto dto)
+        public async Task<IActionResult> LoginTeacher([FromBody] LoginDto dto)
         {
-            try { return Ok(await _auth.RegisterSchoolAsync(dto)); }
+            try { return Ok(await _auth.LoginForRoleAsync(dto, "Teacher", 8)); }
+            catch (UnauthorizedAccessException ex) { return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message }); }
+            catch (Exception ex) { return Unauthorized(new { message = ex.Message }); }
+        }
+
+        [HttpPost("login/student")]
+        [AllowAnonymous]
+        public async Task<IActionResult> LoginStudent([FromBody] LoginDto dto)
+        {
+            try { return Ok(await _auth.LoginForRoleAsync(dto, "Student", 4)); }
+            catch (UnauthorizedAccessException ex) { return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message }); }
+            catch (Exception ex) { return Unauthorized(new { message = ex.Message }); }
+        }
+
+        [HttpPost("refresh")]
+        [AllowAnonymous]
+        public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequestDto dto)
+        {
+            try { return Ok(await _auth.RefreshTokenAsync(dto.RefreshToken)); }
+            catch (UnauthorizedAccessException ex) { return Unauthorized(new { message = ex.Message }); }
             catch (Exception ex) { return BadRequest(new { message = ex.Message }); }
         }
 
-        // -------------------------
-        // Email verification (link target)
-        // -------------------------
-       [HttpGet("verify-email")]
+
+        [HttpPost("register/school")]
+        [HttpPost("register-school")]
         [AllowAnonymous]
-        public async Task<IActionResult> VerifyEmail([FromQuery] string token)
+        public async Task<IActionResult> RegisterSchool([FromBody] RegisterSchoolDto dto)
         {
-            // allow overriding in appsettings or env; fallback to production URL
-            var frontendBase = _config["Frontend:BaseUrl"]?.TrimEnd('/')
-                              ?? "https://app.bluesandstemlabs.com";
+            var origin = Request.Headers["Origin"].FirstOrDefault();
+            try { return Ok(await _auth.RegisterSchoolAsync(dto, origin)); }
+            catch (UserAlreadyExistsException ex) { return Error(StatusCodes.Status409Conflict, "USER_EXISTS", ex.Message); }
+            catch (Exception ex) { return BadRequest(new { message = ex.Message }); }
+        }
+
+
+        [HttpGet("verify-email")]
+        [AllowAnonymous]
+        public async Task<IActionResult> VerifyEmail([FromQuery] string token, [FromQuery] string? site = null)
+        {
+            var brand = BlueSandsLMS.Application.Emails.SiteBrandResolver.ResolveByKey(site, _config);
 
             try
             {
                 await _auth.VerifyEmailAsync(token);
-
-                var successUrl = $"{frontendBase}/auth/verify-success";
-                return Redirect(successUrl); // 302 → frontend success page
+                return Redirect($"{brand.FrontendBaseUrl}/auth/verify-success");
             }
             catch (Exception ex)
             {
                 var reason = WebUtility.UrlEncode(ex.Message);
-                var failUrl = $"{frontendBase}/auth/verify-failed?reason={reason}";
-                return Redirect(failUrl); // 302 → frontend fail page
+                return Redirect($"{brand.FrontendBaseUrl}/auth/verify-failed?reason={reason}");
             }
         }
+[HttpPost("forgot-password")]
+[AllowAnonymous]
+public async Task<IActionResult> ForgotPassword([FromBody] RequestPasswordResetDto dto)
+{
+    try
+    {
+        var origin = Request.Headers["Origin"].FirstOrDefault();
+        await _auth.RequestPasswordResetAsync(dto.Email, origin);
+        return Ok(new
+        {
+            message = "If an account exists with this email, you will receive password reset instructions."
+        });
+    }
+    catch
+    {
 
-        // -------------------------
-        // Resend verification email
-        // Accepts: { "email": "user@example.com" }
-        // -------------------------
+        return Ok(new
+        {
+            message = "If an account exists with this email, you will receive password reset instructions."
+        });
+    }
+}
+
+[HttpPost("reset-password")]
+[AllowAnonymous]
+public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
+{
+    try
+    {
+        var origin = Request.Headers["Origin"].FirstOrDefault();
+        await _auth.ResetPasswordAsync(dto.Token, dto.NewPassword, origin);
+        return Ok(new { message = "Password reset successful. You can now log in with your new password." });
+    }
+    catch (Exception ex)
+    {
+        return BadRequest(new { message = ex.Message });
+    }
+}
+
+[HttpPost("change-password")]
+[Authorize]
+public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto dto)
+{
+    try
+    {
+        var sub = User.FindFirstValue("sub") 
+               ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        
+        if (!Guid.TryParse(sub, out var userId))
+            return Unauthorized();
+        
+        var origin = Request.Headers["Origin"].FirstOrDefault();
+        await _auth.ChangePasswordAsync(userId, dto.CurrentPassword, dto.NewPassword, origin);
+        return Ok(new { message = "Password changed successfully." });
+    }
+    catch (Exception ex)
+    {
+        return BadRequest(new { message = ex.Message });
+    }
+}
+
+        [HttpPost("google")]
+        [HttpPost("google-signin")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GoogleSignIn([FromBody] GoogleSignInDto dto, CancellationToken ct)
+        {
+            try { return Ok(await _auth.GoogleSignInAsync(dto.IdToken, ct)); }
+            catch (UserAlreadyExistsException ex) { return Error(StatusCodes.Status409Conflict, "USER_EXISTS", ex.Message); }
+            catch (UnauthorizedAccessException ex) { return Error(StatusCodes.Status401Unauthorized, "AUTH_REQUIRED", ex.Message); }
+            catch (Exception ex) { return BadRequest(new { message = ex.Message }); }
+        }
+
+
+        [HttpPost("google-signup")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GoogleSignUp([FromBody] GoogleSignUpDto dto, CancellationToken ct)
+        {
+            var origin = Request.Headers["Origin"].FirstOrDefault();
+            try { return Ok(await _auth.GoogleSignUpAsync(dto, origin, ct)); }
+            catch (UserAlreadyExistsException ex) { return Error(StatusCodes.Status409Conflict, "USER_EXISTS", ex.Message); }
+            catch (UnauthorizedAccessException ex) { return Error(StatusCodes.Status401Unauthorized, "AUTH_REQUIRED", ex.Message); }
+            catch (Exception ex) { return BadRequest(new { message = ex.Message }); }
+        }
+
+
         public sealed class ResendVerificationRequest
         {
             public string Email { get; set; } = string.Empty;
@@ -104,7 +209,8 @@ namespace BlueSandsLMS.Api.Controllers
                 if (req is null || string.IsNullOrWhiteSpace(req.Email))
                     return BadRequest(new { message = "Email is required." });
 
-                await _auth.ResendVerificationAsync(req.Email.Trim());
+                var origin = Request.Headers["Origin"].FirstOrDefault();
+                await _auth.ResendVerificationAsync(req.Email.Trim(), origin);
                 return Ok(new { message = "Verification email resent." });
             }
             catch (Exception ex)
@@ -113,10 +219,8 @@ namespace BlueSandsLMS.Api.Controllers
             }
         }
 
-        // -------------------------
-        // Current user profile (for dashboards)
-        // -------------------------
-        [Authorize]
+
+       [Authorize]
 [HttpGet("me")]
 public async Task<IActionResult> Me([FromServices] BlueSandsLMSDbContext db)
 {
@@ -130,7 +234,19 @@ public async Task<IActionResult> Me([FromServices] BlueSandsLMSDbContext db)
     var user = await db.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.Id == userId);
     if (user == null) return Unauthorized();
 
-    // Build base response matching AuthResponseDto structure
+
+    string? schoolName = null;
+    string schoolCurrency = "NGN";
+    if (user.SchoolId.HasValue && user.SchoolId.Value != Guid.Empty)
+    {
+        var school = await db.Schools
+            .Where(s => s.Id == user.SchoolId.Value)
+            .Select(s => new { s.Name, s.Currency })
+            .FirstOrDefaultAsync();
+        schoolName = school?.Name;
+        schoolCurrency = school?.Currency ?? "NGN";
+    }
+
     var response = new AuthResponseDto
     {
         UserId = user.Id,
@@ -138,20 +254,20 @@ public async Task<IActionResult> Me([FromServices] BlueSandsLMSDbContext db)
         Email = user.Email ?? string.Empty,
         Role = user.Role?.Name ?? string.Empty,
         SchoolId = user.SchoolId,
+        SchoolName = schoolName,
+        SchoolCurrency = schoolCurrency,
         IsVerified = user.IsEmailVerified,
         Phone = user.Phone ?? string.Empty,
         Country = user.Country ?? string.Empty,
-        Token = string.Empty // Not needed for /me endpoint
+        Token = string.Empty
     };
 
-    // 🔹 Fetch subscription data (same logic as auth/login)
     var schoolId = user.SchoolId ?? Guid.Empty;
     
     Subscription? subscription = null;
     
     if (schoolId != Guid.Empty)
     {
-        // School user - lookup by SchoolId
         subscription = await db.Subscriptions
             .Where(s => s.SchoolId == schoolId && s.Active)
             .OrderByDescending(s => s.EndsAt)
@@ -159,7 +275,6 @@ public async Task<IActionResult> Me([FromServices] BlueSandsLMSDbContext db)
     }
     else
     {
-        // Individual user - lookup by UserId
         subscription = await db.Subscriptions
             .Where(s => s.UserId == userId && s.Active)
             .OrderByDescending(s => s.EndsAt)
@@ -182,7 +297,6 @@ public async Task<IActionResult> Me([FromServices] BlueSandsLMSDbContext db)
             DaysRemaining = daysRemaining
         };
 
-        // Match tier by students covered
         var students = subscription.StudentsCovered;
         var tier = await db.PricingTiers
             .OrderBy(t => t.MinStudents)
@@ -203,6 +317,42 @@ public async Task<IActionResult> Me([FromServices] BlueSandsLMSDbContext db)
     }
 
     return Ok(response);
+}
+
+[Authorize]
+[HttpPut("me")]
+public async Task<IActionResult> UpdateMe(
+    [FromBody] UpdateProfileDto request,
+    [FromServices] BlueSandsLMSDbContext db,
+    CancellationToken ct)
+{
+    var sub = User.FindFirstValue("sub")
+           ?? User.FindFirstValue(ClaimTypes.NameIdentifier)
+           ?? User.FindFirstValue(ClaimTypes.Name);
+
+    if (string.IsNullOrWhiteSpace(sub) || !Guid.TryParse(sub, out var userId))
+        return Error(StatusCodes.Status401Unauthorized, "AUTH_REQUIRED", "Authentication required.");
+
+    var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+    if (user == null)
+        return Error(StatusCodes.Status404NotFound, "NOT_FOUND", "User not found.");
+
+    if (request.FullName is not null) user.FullName = request.FullName.Trim();
+    if (request.Phone is not null) user.Phone = request.Phone.Trim();
+    if (request.Country is not null) user.Country = request.Country.Trim();
+    if (request.Gender is not null) user.Gender = request.Gender.Trim();
+
+    await db.SaveChangesAsync(ct);
+
+    return Ok(new
+    {
+        id = user.Id,
+        fullName = user.FullName,
+        phone = user.Phone,
+        country = user.Country,
+        gender = user.Gender ?? string.Empty,
+        email = user.Email
+    });
 }
     }
 }

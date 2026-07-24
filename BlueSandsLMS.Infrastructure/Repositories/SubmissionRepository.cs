@@ -46,11 +46,11 @@ namespace BlueSandsLMS.Infrastructure.Repositories
 
         public async Task<Guid> SubmitAsync(Guid assignmentId, Guid studentId, SubmitWorkDto dto)
         {
-            // ensure assignment exists and student is enrolled
+
             var enrolled = await IsStudentEnrolledAsync(assignmentId, studentId);
             if (!enrolled) throw new Exception("Not enrolled in this class.");
 
-            // if a submission exists, treat as update to keep one row per student/assignment
+
             var existing = await _db.Submissions.FirstOrDefaultAsync(s =>
                 s.AssignmentId == assignmentId && s.StudentId == studentId);
 
@@ -69,12 +69,12 @@ namespace BlueSandsLMS.Infrastructure.Repositories
             existing.AttachmentName = dto.AttachmentName;
             existing.AttachmentSizeBytes = dto.AttachmentSizeBytes;
             existing.AttachmentContentType = dto.AttachmentContentType;
-            // If you later add a TextAnswer column, set it here too.
+
 
             existing.Status = SubmissionStatus.Submitted;
             existing.SubmittedAt = DateTime.UtcNow;
 
-            // If it had been graded and you accept resubmits to reset grading:
+
             existing.GraderUserId = null;
             existing.GradedAt = null;
             existing.Score0to1 = null;
@@ -97,7 +97,7 @@ namespace BlueSandsLMS.Infrastructure.Repositories
             s.Status = SubmissionStatus.Submitted;
             s.SubmittedAt = DateTime.UtcNow;
 
-            // reset grading if any
+
             s.GraderUserId = null;
             s.GradedAt = null;
             s.Score0to1 = null;
@@ -110,7 +110,7 @@ namespace BlueSandsLMS.Infrastructure.Repositories
         {
             var s = await _db.Submissions.FindAsync(submissionId) ?? throw new Exception("Submission not found");
 
-            // ensure teacher owns the class of this assignment
+
             var ok = await IsTeacherOfAssignmentAsync(s.AssignmentId, teacherId);
             if (!ok) throw new Exception("Not permitted to grade this submission.");
 

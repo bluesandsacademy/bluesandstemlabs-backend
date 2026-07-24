@@ -1,4 +1,4 @@
-// BlueSandsLMS.Api/Controllers/TeacherCommAnalyticsV1Controller.cs
+
 using System;
 using System.Security.Claims;
 using System.Threading;

@@ -5,10 +5,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace BlueSandsLMS.Infrastructure.Migrations
 {
-    /// <inheritdoc />
+
     public partial class AddEmailVerification : Migration
     {
-        /// <inheritdoc />
+
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<DateTime>(
@@ -32,7 +32,7 @@ namespace BlueSandsLMS.Infrastructure.Migrations
                 values: new object[] { null, false });
         }
 
-        /// <inheritdoc />
+
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(

@@ -13,10 +13,10 @@ namespace BlueSandsLMS.Core.Entities
         public School? School { get; set; }
 
         public string? InviteCode { get; set; }
-    public DateTime? InviteCodeExpiresAt { get; set; }
+        public DateTime? InviteCodeExpiresAt { get; set; }
         public ICollection<Enrollment> Enrollments { get; set; } = new List<Enrollment>();
         public ICollection<Assignment> Assignments { get; set; } = new List<Assignment>();
+        public ICollection<ClassroomTeacher> Teachers { get; set; } = new List<ClassroomTeacher>();
+        public ICollection<ClassMessage> Messages { get; set; } = new List<ClassMessage>();
     }
-
-    public enum ClassRole { Student = 0, Teacher = 1 }
 }

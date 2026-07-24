@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using BlueSandsLMS.Common.DTOs;                 // ✅ needed
+using BlueSandsLMS.Common.DTOs;
 using BlueSandsLMS.Common.Interfaces;
 using BlueSandsLMS.Core.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -54,25 +54,89 @@ namespace BlueSandsLMS.Infrastructure.Repositories
             await _db.SaveChangesAsync();
         }
 
-        public Task<bool> UserIsTeacherAsync(Guid classId, Guid userId) =>
-            _db.Enrollments.AnyAsync(e => e.ClassroomId == classId && e.UserId == userId && e.RoleInClass == ClassRole.Teacher);
+        public async Task<bool> UserIsTeacherAsync(Guid classId, Guid userId)
+        {
+
+            if (await _db.Enrollments.AnyAsync(e =>
+                    e.ClassroomId == classId &&
+                    e.UserId == userId &&
+                    e.RoleInClass == ClassRole.Teacher))
+                return true;
+
+
+            if (await _db.ClassroomTeachers.AnyAsync(ct =>
+                    ct.ClassroomId == classId && ct.TeacherUserId == userId))
+                return true;
+
+
+            var classroom = await _db.Classrooms
+                .AsNoTracking()
+                .Where(c => c.Id == classId)
+                .Select(c => new { c.SchoolId })
+                .FirstOrDefaultAsync();
+
+            if (classroom == null) return false;
+
+            var user = await _db.Users
+                .AsNoTracking()
+                .Where(u => u.Id == userId && u.SchoolId == classroom.SchoolId)
+                .Select(u => new { RoleName = u.Role!.Name })
+                .FirstOrDefaultAsync();
+
+            return user?.RoleName == "SchoolAdmin";
+        }
 
         public async Task EnrollByEmailAsync(Guid classId, string email)
         {
-            var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email) ?? throw new Exception("User not found");
+            email = email.Trim().ToLowerInvariant();
+
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
+
+            if (user == null)
+            {
+
+                var classroom = await _db.Classrooms.AsNoTracking()
+                    .FirstOrDefaultAsync(c => c.Id == classId)
+                    ?? throw new InvalidOperationException("Classroom not found");
+
+                var studentRoleId = await _db.Roles
+                    .Where(r => r.Name == "Student")
+                    .Select(r => r.Id)
+                    .FirstOrDefaultAsync();
+
+                if (studentRoleId == Guid.Empty)
+                    throw new InvalidOperationException("Student role not configured");
+
+                user = new User
+                {
+                    Id       = Guid.NewGuid(),
+                    Email    = email,
+                    FullName = email.Split('@')[0],
+
+                    PasswordHash    = "INVITE_PENDING",
+                    RoleId          = studentRoleId,
+                    SchoolId        = classroom.SchoolId,
+                    IsActive        = true,
+                    IsEmailVerified = false,
+                    DateCreated     = DateTime.UtcNow
+                };
+                _db.Users.Add(user);
+            }
+
             var exists = await _db.Enrollments.AnyAsync(e => e.ClassroomId == classId && e.UserId == user.Id);
             if (!exists)
             {
                 _db.Enrollments.Add(new Enrollment
                 {
-                    Id = Guid.NewGuid(),
+                    Id          = Guid.NewGuid(),
                     ClassroomId = classId,
-                    UserId = user.Id,
+                    UserId      = user.Id,
                     RoleInClass = ClassRole.Student,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt   = DateTime.UtcNow
                 });
-                await _db.SaveChangesAsync();
             }
+
+            await _db.SaveChangesAsync();
         }
 
         public async Task BulkEnrollAsync(Guid classId, IEnumerable<string> emails)
@@ -105,7 +169,7 @@ namespace BlueSandsLMS.Infrastructure.Repositories
             await _db.SaveChangesAsync();
         }
 
-        // ---------------- Invite + listings ----------------
+
 
         public async Task<(string code, DateTime? expiresAt)> RotateInviteCodeAsync(Guid classId, int expireDays)
         {
@@ -167,11 +231,47 @@ namespace BlueSandsLMS.Infrastructure.Repositories
             )).ToList();
         }
 
-        // helper
+        public async Task<List<ClassSummaryDto>> GetClassesBySchoolIdAsync(Guid schoolId)
+        {
+
+            var list = await _db.Classrooms
+                .Where(c => c.SchoolId == schoolId)
+                .Select(c => new
+                {
+                    c.Id,
+                    c.Name,
+                    c.Subject,
+                    c.CreatedAt,
+                    c.InviteCode,
+                    c.InviteCodeExpiresAt
+                })
+                .ToListAsync();
+
+            var ids = list.Select(x => x.Id).ToList();
+            var studentCounts = await _db.Enrollments
+                .Where(e => ids.Contains(e.ClassroomId) && e.RoleInClass == ClassRole.Student)
+                .GroupBy(e => e.ClassroomId)
+                .Select(g => new { ClassId = g.Key, Count = g.Count() })
+                .ToListAsync();
+
+
+            return list.Select(x => new ClassSummaryDto(
+                x.Id,
+                x.Name,
+                x.Subject,
+                ClassRoleDto.Teacher,
+                studentCounts.FirstOrDefault(s => s.ClassId == x.Id)?.Count ?? 0,
+                x.CreatedAt,
+                x.InviteCode,
+                x.InviteCodeExpiresAt
+            )).ToList();
+        }
+
+
         private static (string code, DateTime? expiresAt) GenerateInvite(int expireDays)
         {
             using var rng = System.Security.Cryptography.RandomNumberGenerator.Create();
-            var buf = new byte[5]; rng.GetBytes(buf); // ~8 chars
+            var buf = new byte[5]; rng.GetBytes(buf);
             var code = Convert.ToBase64String(buf).Replace("+", "A").Replace("/", "B").Replace("=", "").ToUpper();
             return (code, DateTime.UtcNow.AddDays(expireDays));
         }

@@ -1,4 +1,4 @@
-// BlueSandsLMS.Application/Services/Teacher/TeacherCommAnalyticsService.cs
+
 using System;
 using System.Linq;
 using System.Threading;
@@ -41,7 +41,7 @@ namespace BlueSandsLMS.Application.Services.Teacher
             var received = await ml.CountAsync(m => m.ToUserId == teacherId, ct);
             var unread = await ml.CountAsync(m => m.ToUserId == teacherId && m.ReadAt == null, ct);
 
-            // crude response time: first reply by receiver in same ThreadId after sender’s message
+
             var replies = await ml.Where(m => m.ThreadId != null).ToListAsync(ct);
             var avgMinutes = 0d;
             if (replies.Count > 0)
@@ -55,7 +55,7 @@ namespace BlueSandsLMS.Application.Services.Teacher
                     {
                         var a = ordered[i];
                         var b = ordered[i + 1];
-                        // if a is from teacher and next from student (or vice versa), count response gap
+
                         if (a.FromUserId == teacherId && b.FromUserId != teacherId)
                             res.Add((b.SentAt - a.SentAt).TotalMinutes);
                         else if (a.FromUserId != teacherId && b.FromUserId == teacherId)

@@ -8,7 +8,7 @@ namespace BlueSandsLMS.Core.Entities
         public Guid ClassroomId { get; set; }
         [MaxLength(200)] public string Title { get; set; } = "";
         public AssignmentType Type { get; set; } = AssignmentType.Experiment;
-        [MaxLength(100)] public string? ResourceCode { get; set; } // lab/quiz code
+        [MaxLength(100)] public string? ResourceCode { get; set; }
         public DateTime? DueAt { get; set; }
         public Guid? CreatedByUserId { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

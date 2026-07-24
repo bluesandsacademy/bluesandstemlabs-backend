@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using BlueSandsLMS.Common.DTOs.Student;
 
+
 namespace BlueSandsLMS.Common.Interfaces.Student
 {
     public interface IStudentDashboardService
@@ -26,7 +27,7 @@ namespace BlueSandsLMS.Common.Interfaces.Student
 
         Task<IReadOnlyList<StudentLeaderboardEntry>> GetLeaderboardAsync(
             Guid userId,
-            string scope, // "class" | "school" | "global"
+            string scope,
             int take = 20,
             CancellationToken ct = default);
     }

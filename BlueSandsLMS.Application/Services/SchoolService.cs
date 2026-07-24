@@ -38,7 +38,7 @@ namespace BlueSandsLMS.Application.Services
 
     school.Name = dto.Name;
     school.Subdomain = dto.Subdomain;
-    // Optionally handle IsActive, Address, etc.
+
 
     await _db.SaveChangesAsync();
 

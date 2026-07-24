@@ -23,10 +23,7 @@ namespace BlueSandsLMS.Api.Controllers
             return Guid.TryParse(s, out var id) ? id : (Guid?)null;
         }
 
-        /// <summary>
-        /// Triggers the monthly parent email report for a school.
-        /// If month/year are omitted, previous month is used.
-        /// </summary>
+
         [HttpPost("send-monthly")]
         public async Task<IActionResult> SendMonthly([FromQuery] Guid? schoolId = null, [FromQuery] int? year = null, [FromQuery] int? month = null)
         {
@@ -45,7 +42,7 @@ namespace BlueSandsLMS.Api.Controllers
 
             if (!schoolId.HasValue) return BadRequest("schoolId is required.");
 
-            // Default: previous month (local policy)
+
             var now = DateTime.UtcNow;
             var prev = now.AddMonths(-1);
             int y = year ?? prev.Year;

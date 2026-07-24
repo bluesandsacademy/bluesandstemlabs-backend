@@ -15,10 +15,12 @@ namespace BlueSandsLMS.Common.Interfaces
         Task EnrollByEmailAsync(Guid classId, string email);
         Task BulkEnrollAsync(Guid classId, IEnumerable<string> emails);
 
-        // ✅ Invite + listings
+
         Task<(string code, DateTime? expiresAt)> RotateInviteCodeAsync(Guid classId, int expireDays);
         Task<Guid?> GetClassroomIdByInviteAsync(string code);
         Task JoinByCodeAsync(Guid userId, string code);
         Task<List<ClassSummaryDto>> GetMyClassesAsync(Guid userId);
+
+        Task<List<ClassSummaryDto>> GetClassesBySchoolIdAsync(Guid schoolId);
     }
 }

@@ -8,6 +8,6 @@ namespace BlueSandsLMS.Core.Entities
         public DateTime? ExpiresAt { get; set; }
         public int? MaxRedemptions { get; set; }
         public int RedemptionCount { get; set; }
-        // future: percentage or fixed amount discount fields
+
     }
 }

@@ -2,292 +2,174 @@ using System.Text;
 using BlueSandsLMS.Common.DTOs;
 using BlueSandsLMS.Common.DTOs.Dashboard;
 using BlueSandsLMS.Common.Interfaces;
-using BlueSandsLMS.Infrastructure;  // BlueSandsLMSDbContext
+using BlueSandsLMS.Infrastructure;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
-using BlueSandsLMS.Core.Entities; // PaymentStatus, entities
-
-// Interface aliases to avoid name collision
-using ISchoolAdminAnalytics = BlueSandsLMS.Common.Interfaces.Dashboard.ISchoolAdminService;
-using ISchoolAdminOps = BlueSandsLMS.Common.Interfaces.ISchoolAdminService;
+using BCrypt.Net;
+using BlueSandsLMS.Common.DTOs.Admin;
 
 namespace BlueSandsLMS.Application.Services.Dashboard
 {
-    internal static class Safe // tiny helpers to survive schema drift
-    {
-        // Try EF.Property in-db first, then return null if column is not there (caught at runtime if misspelled).
-        public static IQueryable<TResult?> Col<TResult, TEntity>(this IQueryable<TEntity> q, string name)
-            where TResult : struct
-            => q.Select(e => EF.Property<TResult?>(e!, name));
+    using ISchoolAdminAnalytics = BlueSandsLMS.Common.Interfaces.Dashboard.ISchoolAdminService;
+    using ISchoolAdminOps = BlueSandsLMS.Common.Interfaces.ISchoolAdminService;
 
-        public static IQueryable<string?> ColStr<TEntity>(this IQueryable<TEntity> q, string name)
-            => q.Select(e => EF.Property<string?>(e!, name));
+    using DashboardLeaderboardEntry = BlueSandsLMS.Common.DTOs.LeaderboardEntry;
 
-        // Reflection helper for after ToListAsync
-        public static T? Get<T>(object obj, params string[] names)
-        {
-            if (obj is null) return default;
-            var t = obj.GetType();
-            foreach (var n in names)
-            {
-                var p = t.GetProperty(n);
-                if (p != null && p.PropertyType == typeof(T)) return (T?)p.GetValue(obj);
-                if (p != null && typeof(T).IsAssignableFrom(p.PropertyType)) return (T?)p.GetValue(obj);
-            }
-            return default;
-        }
-    }
-
-    /// <summary>
-    /// Canonical School Admin service (dashboards + upserts),
-    /// hardened against column/name differences found in your current schema.
-    /// </summary>
     public sealed class SchoolAdminService : ISchoolAdminAnalytics, ISchoolAdminOps
     {
         private readonly BlueSandsLMSDbContext _db;
-        private readonly IMemoryCache _cache;
         private readonly ICacheBustService _cacheBust;
 
-        public SchoolAdminService(BlueSandsLMSDbContext db, IMemoryCache cache, ICacheBustService cacheBust)
+        public SchoolAdminService(BlueSandsLMSDbContext db, ICacheBustService cacheBust)
         {
             _db = db;
-            _cache = cache;
             _cacheBust = cacheBust;
         }
 
-        // ===============  Analytics  ===============
-
         public async Task<SchoolOverviewDto> GetOverviewAsync(Guid schoolId, CancellationToken ct)
         {
-            var key = $"sa:overview:{schoolId}";
-            if (_cache.TryGetValue<SchoolOverviewDto>(key, out var cached) && cached is not null)
-                return cached;
-
             var now = DateTimeOffset.UtcNow;
-            var since30 = now.AddDays(-30).UtcDateTime;
 
-            // role lookup (Teacher, Student)
-            var roleIds = await _db.Roles
-                .Where(r => r.Name == "Teacher" || r.Name == "Student")
-                .Select(r => new { r.Id, r.Name })
-                .ToListAsync(ct);
-            var teacherRoleId = roleIds.FirstOrDefault(r => r.Name == "Teacher")?.Id;
-            var studentRoleId = roleIds.FirstOrDefault(r => r.Name == "Student")?.Id;
+            var teacherRoleId = await _db.Roles.Where(r => r.Name == "Teacher").Select(r => r.Id).FirstOrDefaultAsync(ct);
+            var studentRoleId = await _db.Roles.Where(r => r.Name == "Student").Select(r => r.Id).FirstOrDefaultAsync(ct);
 
-            var activeTeachers = teacherRoleId == null
-                ? 0
-                : await _db.Users.CountAsync(u => u.SchoolId == schoolId && u.RoleId == teacherRoleId && u.IsActive, ct);
+            var totalTeachers = teacherRoleId == Guid.Empty ? 0 :
+                await _db.Users.CountAsync(u => u.SchoolId == schoolId && u.RoleId == teacherRoleId, ct);
 
-            var activeStudents = studentRoleId == null
-                ? 0
-                : await _db.Users.CountAsync(u => u.SchoolId == schoolId && u.RoleId == studentRoleId && u.IsActive, ct);
+            var totalStudents = studentRoleId == Guid.Empty ? 0 :
+                await _db.Users.CountAsync(u => u.SchoolId == schoolId && u.RoleId == studentRoleId, ct);
 
-            // Experiments: scope by classroom
-            var experiments = await _db.ExperimentLaunches
-                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId),
-                      e => e.ClassroomId, c => c.Id, (e, c) => e)
+            var activeClasses = await _db.Classrooms.CountAsync(c => c.SchoolId == schoolId, ct);
+
+            var experimentsRunAllTime = await _db.ExperimentLaunches
+                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), e => e.ClassroomId, c => c.Id, (e, _) => e)
                 .CountAsync(ct);
 
-            // Quizzes: distinct quiz keys from attempts
-            var attemptsForDistinct = await _db.QuizAttempts
-                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId),
-                      q => q.ClassroomId, c => c.Id, (q, c) => q)
-                .Select(q => q)
-                .ToListAsync(ct);
+            var termSince = now.AddDays(-90).UtcDateTime;
+            var experimentsRunThisTerm = await _db.ExperimentLaunches
+                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), e => e.ClassroomId, c => c.Id, (e, _) => e)
+                .CountAsync(e => e.StartedAt >= termSince, ct);
 
-            var quizKeys = attemptsForDistinct
-                .Select(q =>
-                    // prefer QuizId / AssessmentId / QuizRef; else use q.Id as last resort
-                    Safe.Get<Guid?>(q, "QuizId", "AssessmentId")?.ToString()
-                    ?? Safe.Get<string>(q, "QuizRef", "QuizKey")
-                    ?? Safe.Get<Guid>(q, "Id").ToString()
-                )
-                .Where(s => !string.IsNullOrWhiteSpace(s))
+
+            var avgScore = Math.Round(
+                (double)(await _db.QuizAttempts.AsNoTracking()
+                    .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), q => q.ClassroomId, c => c.Id, (q, _) => q)
+                    .AverageAsync(q => (decimal?)q.Score0to1, ct) ?? 0m) * 100.0, 2);
+
+            var avgCompletion = 0.0;
+
+            var weekAgo7  = DateTime.UtcNow.AddDays(-7);
+            var weekAgo30 = DateTime.UtcNow.AddDays(-30);
+
+            var weeklyActiveUsers = await _db.QuizAttempts.AsNoTracking()
+                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), q => q.ClassroomId, c => c.Id, (q, _) => q)
+                .Where(q => q.CompletedAt != null && q.CompletedAt >= weekAgo7)
+                .Select(q => q.UserId)
                 .Distinct()
-                .Count();
+                .CountAsync(ct);
 
-            var newRegs30d = await _db.Users
-                .CountAsync(u => u.SchoolId == schoolId && u.DateCreated >= since30, ct);
+            var monthlyActiveUsers = await _db.QuizAttempts.AsNoTracking()
+                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), q => q.ClassroomId, c => c.Id, (q, _) => q)
+                .Where(q => q.CompletedAt != null && q.CompletedAt >= weekAgo30)
+                .Select(q => q.UserId)
+                .Distinct()
+                .CountAsync(ct);
 
-            var sub = await _db.Subscriptions
-                .Where(s => s.SchoolId == schoolId && s.Active)
-                .OrderByDescending(s => s.EndsAt)
-                .FirstOrDefaultAsync(ct);
+            var schoolName = await _db.Schools.Where(s => s.Id == schoolId).Select(s => s.Name).FirstOrDefaultAsync(ct) ?? "(School)";
 
-            var lastPayment = await _db.Payments
-                .Where(p => p.SchoolId == schoolId && p.Status == PaymentStatus.Paid)
-                .OrderByDescending(p => p.DateCreated)
-                .FirstOrDefaultAsync(ct);
+            var totalIlsCreated = await _db.InteractiveLearningSpaces
+                .Join(_db.Users.Where(u => u.SchoolId == schoolId), i => i.CreatedBy, u => u.Id, (i, _) => i)
+                .CountAsync(ct);
 
-            // seats from StudentsCovered
-            var seats = sub?.StudentsCovered ?? 0;
-            var used = activeStudents;
-            var percent = seats == 0 ? 0 : Math.Round(100.0 * used / seats, 1);
-
-            var verified = await _db.Users.CountAsync(u => u.SchoolId == schoolId && u.IsEmailVerified, ct);
-            var totalUsers = await _db.Users.CountAsync(u => u.SchoolId == schoolId, ct);
-            var unverified = totalUsers - verified;
-            var rate = totalUsers == 0 ? 0 : Math.Round(100.0 * verified / totalUsers, 1);
-
-            // DAU by quiz completion in last 7d (CompletedAt might be nullable)
-            var from7 = DateTime.UtcNow.Date.AddDays(-7);
-            var dailyQuizUsers = await _db.QuizAttempts
-                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId),
-                      q => q.ClassroomId, c => c.Id, (q, c) => q)
-                .Where(q => EF.Property<DateTime?>(q, "CompletedAt") != null &&
-                            EF.Property<DateTime?>(q, "CompletedAt")!.Value.Date >= from7)
-                .GroupBy(q => EF.Property<DateTime?>(q, "CompletedAt")!.Value.Date)
-                .Select(g => new { Date = DateOnly.FromDateTime(g.Key), Users = g.Select(x => EF.Property<Guid>(x, "UserId")).Distinct().Count() })
-                .ToListAsync(ct);
-
-            var last7 = Enumerable.Range(0, 7).Select(i => DateOnly.FromDateTime(DateTime.UtcNow.Date.AddDays(-i))).Reverse().ToList();
-            var dau = last7.Select(d => dailyQuizUsers.FirstOrDefault(x => x.Date == d)?.Users ?? 0).ToList();
-
-            // Compute last amount in kobo: prefer AmountKobo, else derive from Total
-            long? lastAmountKobo = null;
-            if (lastPayment is not null)
-            {
-                lastAmountKobo = (lastPayment.AmountKobo != 0)
-                    ? lastPayment.AmountKobo
-                    : (long?)(lastPayment.Total * 100m);
-            }
-
-            var dto = new SchoolOverviewDto(
-                new TotalsDto(activeTeachers, activeStudents, experiments, quizKeys, newRegs30d),
-                new SubscriptionCardDto(
-                    sub?.EndsAt >= now,
-                    /* Tier  */ "Unknown",
-                    /* Seats */ sub?.StudentsCovered ?? 0,
-                    sub?.EndsAt,
-                    sub?.EndsAt is null ? 0 : Math.Max(0, (sub.EndsAt - now).Days)
-                ),
-                new BillingCardDto(
-                    lastAmountKobo,
-                    lastPayment?.DateCreated,
-                    lastPayment?.Status.ToString() ?? "—",
-                    lastPayment?.PromoCode
-                ),
-                new LicenseUtilizationDto(sub?.StudentsCovered ?? 0, used, percent),
-                new VerificationDto(verified, unverified, rate),
-                new Usage7dDto(dau)
+            return new SchoolOverviewDto(
+                schoolId, schoolName, totalStudents, totalTeachers, activeClasses,
+                experimentsRunThisTerm, experimentsRunAllTime, avgCompletion, avgScore,
+                weeklyActiveUsers, monthlyActiveUsers, totalIlsCreated
             );
-
-            _cache.Set(key, dto, TimeSpan.FromMinutes(5));
-            return dto;
         }
 
         public async Task<TrendsDto> GetTrendsAsync(Guid schoolId, int days, CancellationToken ct)
-{
-    days = Math.Clamp(days <= 0 ? 30 : days, 7, 120);
-    var since = DateTime.UtcNow.Date.AddDays(-days);
-
-    // --- New Users (SQL → client map to DateOnly)
-    var newUsersRaw = await _db.Users
-        .Where(u => u.SchoolId == schoolId && u.DateCreated >= since)
-        .GroupBy(u => u.DateCreated.Date)
-        .Select(g => new { Date = g.Key, Count = g.Count() })
-        .OrderBy(x => x.Date)
-        .ToListAsync(ct);
-
-    var newUsers = newUsersRaw
-        .Select(x => new DateCount(DateOnly.FromDateTime(x.Date), x.Count))
-        .ToList();
-
-    // --- Daily Paid (pull minimal fields, aggregate client-side)
-    var paidRows = await _db.Payments
-        .Where(p => p.SchoolId == schoolId
-                    && p.Status == Core.Entities.PaymentStatus.Paid
-                    && p.DateCreated >= since)
-        .Select(p => new { p.DateCreated, p.AmountKobo, p.Total })
-        .ToListAsync(ct);
-
-    var dailyPaid = paidRows
-        .GroupBy(p => p.DateCreated.Date)
-        .Select(g =>
         {
-            long sum = 0;
-            foreach (var x in g)
-            {
-                sum += (x.AmountKobo != 0) ? x.AmountKobo : (long)(x.Total * 100m);
-            }
-            return new DateAmount(DateOnly.FromDateTime(g.Key), sum);
-        })
-        .OrderBy(x => x.Date)
-        .ToList();
+            days = Math.Clamp(days <= 0 ? 30 : days, 7, 120);
+            var since = DateTime.UtcNow.Date.AddDays(-days);
 
-    // --- Experiments (SQL → client map)
-    var experimentsRaw = await _db.ExperimentLaunches
-        .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId),
-              e => e.ClassroomId, c => c.Id, (e, c) => e)
-        .Where(e => e.StartedAt >= since)
-        .GroupBy(e => e.StartedAt.Date)
-        .Select(g => new { Date = g.Key, Count = g.Count() })
-        .OrderBy(x => x.Date)
-        .ToListAsync(ct);
+            var dailyUsers = await _db.QuizAttempts.AsNoTracking()
+                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), q => q.ClassroomId, c => c.Id, (q, _) => q)
+                .Where(q => q.CompletedAt != null && q.CompletedAt.Value.Date >= since)
+                .GroupBy(q => q.CompletedAt!.Value.Date)
+                .Select(g => new { Date = g.Key, Users = g.Select(x => x.UserId).Distinct().Count() })
+                .OrderBy(x => x.Date).ToListAsync(ct);
 
-    var experiments = experimentsRaw
-        .Select(x => new DateCount(DateOnly.FromDateTime(x.Date), x.Count))
-        .ToList();
+            var activeUsers = dailyUsers
+                .Select(x => new DataPoint(new DateTimeOffset(x.Date, TimeSpan.Zero), x.Users))
+                .ToList();
 
-    // --- Assignments (SQL → client map)
-    var assignmentsRaw = await _db.Assignments
-        .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId),
-              a => a.ClassroomId, c => c.Id, (a, c) => a)
-        .Where(a => a.CreatedAt >= since)
-        .GroupBy(a => a.CreatedAt.Date)
-        .Select(g => new { Date = g.Key, Count = g.Count() })
-        .OrderBy(x => x.Date)
-        .ToListAsync(ct);
+            var ex = await _db.ExperimentLaunches
+                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), e => e.ClassroomId, c => c.Id, (e, _) => e)
+                .Where(e => e.StartedAt >= since)
+                .GroupBy(e => e.StartedAt.Date)
+                .Select(g => new { Date = g.Key, Count = g.Count() })
+                .OrderBy(x => x.Date).ToListAsync(ct);
 
-    var assignments = assignmentsRaw
-        .Select(x => new DateCount(DateOnly.FromDateTime(x.Date), x.Count))
-        .ToList();
+            var experimentsRun = ex
+                .Select(x => new DataPoint(new DateTimeOffset(x.Date, TimeSpan.Zero), x.Count))
+                .ToList();
 
-    return new TrendsDto(new TrendSeries(newUsers, dailyPaid, experiments, assignments));
-}
+            var dailyScores = await _db.QuizAttempts.AsNoTracking()
+                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), q => q.ClassroomId, c => c.Id, (q, _) => q)
+                .Where(q => q.CompletedAt != null && q.CompletedAt.Value.Date >= since)
+                .Select(q => new
+                {
+                    D = q.CompletedAt!.Value.Date,
+                    S = (double?)(q.Score0to1 * 100m)
+                })
+                .ToListAsync(ct);
 
+            var avgScores = dailyScores
+                .GroupBy(x => x.D)
+                .Select(g =>
+                {
+                    var vals = g.Where(z => z.S.HasValue).Select(z => z.S!.Value).ToList();
+                    var v = vals.Count == 0 ? 0.0 : vals.Average();
+                    return new DataPoint(new DateTimeOffset(g.Key, TimeSpan.Zero), v);
+                })
+                .OrderBy(x => x.Ts).ToList();
+
+            return new TrendsDto(activeUsers, experimentsRun, avgScores);
+        }
 
         public async Task<PerformanceDto> GetPerformanceAsync(Guid schoolId, DateOnly? since, DateOnly? until, CancellationToken ct)
         {
             var from = (since ?? DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30))).ToDateTime(TimeOnly.MinValue);
-            var to   = (until ?? DateOnly.FromDateTime(DateTime.UtcNow)).ToDateTime(TimeOnly.MaxValue);
+            var to = (until ?? DateOnly.FromDateTime(DateTime.UtcNow)).ToDateTime(TimeOnly.MaxValue);
 
-            // Pull attempts for this school and window
-            var raw = await _db.QuizAttempts
-                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId),
-                      q => q.ClassroomId, c => c.Id, (q, c) => q)
-                .Where(q => EF.Property<DateTime?>(q, "CompletedAt") != null &&
-                            EF.Property<DateTime?>(q, "CompletedAt")!.Value >= from &&
-                            EF.Property<DateTime?>(q, "CompletedAt")!.Value <= to)
-                .Select(q => q)
+            var scores = await _db.QuizAttempts
+                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), q => q.ClassroomId, c => c.Id, (q, _) => q)
+                .Where(q => q.CompletedAt != null && q.CompletedAt >= from && q.CompletedAt <= to)
+                .Select(q => (double)(q.Score0to1 * 100m))
                 .ToListAsync(ct);
 
-            // Extract fields via reflection to survive different column names
-            var shaped = raw.Select(q => new
-            {
-                Score   = Safe.Get<double?>(q, "Score", "Percentage", "ScorePercent") ?? 0.0,
-                Passed  = Safe.Get<bool?>(q, "Passed", "IsPass") ?? false,
-                Subject = Safe.Get<string>(q, "Subject", "Topic") ?? "Unknown",
-                ClassId = Safe.Get<Guid>(q, "ClassroomId"),
-                ClassName = Safe.Get<string>(Safe.Get<object?>(q, "Classroom") ?? new object(), "Name") ?? "(Class)"
-            }).ToList();
+            var vals   = scores.OrderBy(x => x).ToList();
+            var avg    = vals.Count == 0 ? 0.0 : Math.Round(vals.Average(), 2);
+            var median = vals.Count == 0 ? 0.0 :
+                (vals.Count % 2 == 1 ? vals[vals.Count / 2]
+                                     : Math.Round((vals[vals.Count / 2 - 1] + vals[vals.Count / 2]) / 2.0, 2));
 
-            var overall = shaped.Count == 0 ? 0 : Math.Round(shaped.Average(x => x.Score), 2);
-            var pass    = shaped.Count == 0 ? 0 : Math.Round(100.0 * shaped.Count(x => x.Passed) / shaped.Count, 1);
+            var completedExperiments = await _db.ExperimentLaunches
+                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), e => e.ClassroomId, c => c.Id, (e, _) => e)
+                .CountAsync(e => e.StartedAt >= from && e.StartedAt <= to, ct);
 
-            var subjects = shaped
-                .GroupBy(x => x.Subject)
-                .Select(g => new SubjectScore(g.Key, Math.Round(g.Average(x => x.Score), 2), g.Count()))
-                .OrderByDescending(s => s.Average)
-                .ToList();
+            var assigned = await _db.Assignments
+                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), a => a.ClassroomId, c => c.Id, (a, _) => a)
+                .CountAsync(a => a.CreatedAt >= from && a.CreatedAt <= to, ct);
 
-            var classes = shaped
-                .GroupBy(x => new { x.ClassId, x.ClassName })
-                .Select(g => new ClassScore(g.Key.ClassId, g.Key.ClassName, Math.Round(g.Average(x => x.Score), 2), g.Count()))
-                .OrderByDescending(c => c.Average)
-                .ToList();
+            var submitted = await _db.Submissions
+                .Join(_db.Assignments.Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), a => a.ClassroomId, c => c.Id, (a, _) => a),
+                      s => s.AssignmentId, a => a.Id, (s, a) => s)
+                .CountAsync(s => s.SubmittedAt != null && s.SubmittedAt >= from && s.SubmittedAt <= to, ct);
 
-            return new PerformanceDto(overall, pass, subjects, classes);
+            var completionRate = assigned == 0 ? 0.0 : Math.Round(100.0 * submitted / assigned, 1);
+
+            return new PerformanceDto(avg, median, completedExperiments, completionRate);
         }
 
         public async Task<TeacherActivityDto> GetTeacherActivityAsync(Guid schoolId, int days, CancellationToken ct)
@@ -295,71 +177,59 @@ namespace BlueSandsLMS.Application.Services.Dashboard
             days = Math.Clamp(days <= 0 ? 30 : days, 7, 120);
             var since = DateTime.UtcNow.AddDays(-days);
 
-            // Assignments: count by CreatedById/TeacherId (fallback)
-            var asgRaw = await _db.Assignments
-                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId),
-                      a => a.ClassroomId, c => c.Id, (a, c) => a)
+            var perTeacher = await _db.Assignments
+                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), a => a.ClassroomId, c => c.Id, (a, _) => a)
                 .Where(a => a.CreatedAt >= since)
-                .Select(a => a)
-                .ToListAsync(ct);
-
-            var teacherAsg = asgRaw
-                .Select(a => new
+                .GroupBy(a => new
                 {
-                    TeacherId = Safe.Get<Guid?>(a, "TeacherId", "CreatedById"),
-                     TeacherName = Safe.Get<string>(Safe.Get<object?>(a, "Teacher") ?? new object(), "FullName")
+                    TeacherId = (Guid?)EF.Property<Guid?>(a, "TeacherId") ?? EF.Property<Guid?>(a, "CreatedById")
                 })
-                .Where(x => x.TeacherId.HasValue)
-                .GroupBy(x => new { Id = x.TeacherId!.Value, Name = x.TeacherName ?? "(Teacher)" })
-                .Select(g => new TeacherAssignments(g.Key.Id, g.Key.Name, g.Count()))
-                .OrderByDescending(x => x.Assignments)
-                .ToList();
+                .Select(g => new { TeacherId = g.Key.TeacherId, ExperimentsAssigned = g.Count(), Classes = g.Select(x => EF.Property<Guid>(x, "ClassroomId")).Distinct().Count() })
+                .Where(x => x.TeacherId != null)
+                .OrderByDescending(x => x.ExperimentsAssigned)
+                .FirstOrDefaultAsync(ct);
 
-            // Grading turnaround via assignments join (already scoped)
-            var graded = await _db.Submissions
-                .Join(_db.Assignments.Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), a => a.ClassroomId, c => c.Id, (a, c) => a),
-                      s => s.AssignmentId, a => a.Id, (s, a) => s)
-                .Where(s => s.SubmittedAt != null && s.GradedAt != null && s.SubmittedAt >= since)
-                .Select(s => new { s.SubmittedAt, s.GradedAt })
-                .ToListAsync(ct);
+            if (perTeacher is null)
+                return new TeacherActivityDto(Guid.Empty, "(Teacher)", null, 0, 0, 0, null);
 
-            TimeSpan? avgTurnaround = null;
-            if (graded.Count > 0)
+            var tId = perTeacher.TeacherId!.Value;
+            var t = await _db.Users.Where(u => u.Id == tId).Select(u => new { u.FullName, u.Email }).FirstOrDefaultAsync(ct);
+
+            var studentsReached = await _db.Submissions
+                .Join(_db.Assignments, s => s.AssignmentId, a => a.Id, (s, a) => new { s, a })
+                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), sa => sa.a.ClassroomId, c => c.Id, (sa, _) => sa)
+                .Where(x => ((Guid?)EF.Property<Guid?>(x.a, "TeacherId") ?? EF.Property<Guid?>(x.a, "CreatedById")) == tId &&
+                            x.s.SubmittedAt != null && x.s.SubmittedAt >= since)
+                .Select(x => EF.Property<Guid>(x.s, "StudentId"))
+                .Distinct()
+                .CountAsync(ct);
+
+            var lastGrade = await _db.Submissions
+                .Join(_db.Assignments, s => s.AssignmentId, a => a.Id, (s, a) => new { s, a })
+                .Where(x => ((Guid?)EF.Property<Guid?>(x.a, "TeacherId") ?? EF.Property<Guid?>(x.a, "CreatedById")) == tId &&
+                            x.s.GradedAt != null)
+                .MaxAsync(x => (DateTime?)x.s.GradedAt, ct);
+
+            var lastAssign = await _db.Assignments
+                .Where(a => ((Guid?)EF.Property<Guid?>(a, "TeacherId") ?? EF.Property<Guid?>(a, "CreatedById")) == tId)
+                .MaxAsync(a => (DateTime?)a.CreatedAt, ct);
+
+            DateTimeOffset? lastActive = null;
+            if (lastGrade != null || lastAssign != null)
             {
-                var avgTicks = graded.Average(x => (x.GradedAt!.Value - x.SubmittedAt!.Value).Ticks);
-                avgTurnaround = TimeSpan.FromTicks(Convert.ToInt64(avgTicks));
+                var max = new[] { lastGrade, lastAssign }.Where(d => d != null).Max();
+                if (max != null) lastActive = new DateTimeOffset(max.Value);
             }
 
-            // Engagement score = assignments + “graded-by-teacher”
-            var gradedByTeacher = await _db.Submissions
-                .Join(_db.Assignments.Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), a => a.ClassroomId, c => c.Id, (a, c) => a),
-                      s => s.AssignmentId, a => a.Id, (s, a) => new { s, a })
-                .Where(x => x.s.GradedAt != null && x.s.GradedAt >= since)
-                .Select(x => new
-                {
-                    TeacherId = Safe.Get<Guid?>(x.a, "TeacherId", "CreatedById"),
-                    TeacherName = Safe.Get<string>(Safe.Get<object?>(x.a, "Teacher") ?? new object(), "FullName")
-                })
-                .ToListAsync(ct);
-
-            var gradedCounts = gradedByTeacher
-                .Where(x => x.TeacherId.HasValue)
-                .GroupBy(x => new { Id = x.TeacherId!.Value, Name = x.TeacherName ?? "(Teacher)" })
-                .Select(g => new { g.Key.Id, g.Key.Name, Count = g.Count() })
-                .ToList();
-
-            var m = new Dictionary<Guid, (string Name, int Score)>();
-            foreach (var a in teacherAsg) m[a.TeacherId] = (a.TeacherName, a.Assignments);
-            foreach (var g in gradedCounts)
-            {
-                var cur = m.TryGetValue(g.Id, out var t) ? t.Score : 0;
-                m[g.Id] = (g.Name, cur + g.Count);
-            }
-
-            var engagement = m.Select(kv => new TeacherEngagement(kv.Key, kv.Value.Name, kv.Value.Score))
-                              .OrderByDescending(x => x.Score).ToList();
-
-            return new TeacherActivityDto(teacherAsg, avgTurnaround, engagement);
+            return new TeacherActivityDto(
+                tId,
+                t?.FullName ?? "(Teacher)",
+                t?.Email,
+                perTeacher.Classes,
+                perTeacher.ExperimentsAssigned,
+                studentsReached,
+                lastActive
+            );
         }
 
         public async Task<ExperimentsCoursesDto> GetExperimentsAndCoursesAsync(Guid schoolId, int days, CancellationToken ct)
@@ -367,101 +237,77 @@ namespace BlueSandsLMS.Application.Services.Dashboard
             days = Math.Clamp(days <= 0 ? 30 : days, 7, 120);
             var since = DateTime.UtcNow.AddDays(-days);
 
-            var totalExperiments = await _db.ExperimentLaunches
-                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId),
-                      e => e.ClassroomId, c => c.Id, (e, c) => e)
-                .CountAsync(ct);
-
-            // class population from enrollments -> classroom
-            var classPopulation = await _db.Enrollments
-                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId),
-                      en => en.ClassroomId, c => c.Id, (en, c) => new { en, c })
-                .GroupBy(x => new { x.c.Id, x.c.Name })
-                .Select(g => new { ClassroomId = g.Key.Id, Name = g.Key.Name, Participants = g.Count() })
+            var ex = await _db.ExperimentLaunches
+                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), e => e.ClassroomId, c => c.Id, (e, _) => e)
+                .Where(e => e.StartedAt >= since)
+                .Select(e => new
+                {
+                    Title = (string?)EF.Property<string?>(e, "ExperimentName") ??
+                            (string?)EF.Property<string?>(e, "Name") ??
+                            "(Experiment)"
+                })
                 .ToListAsync(ct);
 
-            // completed per class: submissions -> assignment -> classroom
-            var completedByClass = await _db.Submissions
-                .Join(_db.Assignments.Join(_db.Classrooms.Where(c => c.SchoolId == schoolId),
-                                           a => a.ClassroomId, c => c.Id, (a, c) => a),
-                      s => s.AssignmentId, a => a.Id, (s, a) => new { s, a.ClassroomId })
-                .Where(x => x.s.SubmittedAt >= since)
-                .GroupBy(x => x.ClassroomId)
-                .Select(g => new { ClassroomId = g.Key, Completed = g.Select(x => x.s.StudentId).Distinct().Count() })
-                .ToListAsync(ct);
+            var topExperiments = ex
+                .GroupBy(x => x.Title ?? "(Experiment)")
+                .Select(g => new ItemCount(Guid.Empty, g.Key, g.Count()))
+                .OrderByDescending(x => x.Count)
+                .Take(10)
+                .ToList();
 
-            var completionRates = classPopulation.Select(c =>
-            {
-                var completed = completedByClass.FirstOrDefault(x => x.ClassroomId == c.ClassroomId)?.Completed ?? 0;
-                var pct = c.Participants == 0 ? 0 : Math.Round(100.0 * completed / c.Participants, 1);
-                return new ClassCompletionRate(c.ClassroomId, c.Name, pct, c.Participants);
-            })
-            .OrderByDescending(x => x.CompletionPercent)
-            .ToList();
+            var topCourses = new List<ItemCount>();
 
-            // No materials telemetry in your current schema
-            return new ExperimentsCoursesDto(totalExperiments, completionRates, 0.0, new List<ResourcePopularity>());
+            return new ExperimentsCoursesDto(topExperiments, topCourses);
         }
 
-        public Task<SystemMetricsDto> GetSystemMetricsAsync(Guid schoolId, int days, CancellationToken ct)
-            => Task.FromResult(new SystemMetricsDto(new List<HourCount>(), new List<NameCount>(), new List<NameCount>(), new List<DateCount>()));
+        public async Task<SystemMetricsDto> GetSystemMetricsAsync(Guid schoolId, int days, CancellationToken ct)
+        {
+            var totalSchools = await _db.Schools.CountAsync(ct);
+            var totalTeachers = await _db.Users.CountAsync(u => u.Role!.Name == "Teacher", ct);
+            var totalStudents = await _db.Users.CountAsync(u => u.Role!.Name == "Student", ct);
+            var totalExperiments = await _db.ExperimentLaunches.CountAsync(ct);
+
+            var mau = await _db.QuizAttempts
+                .Where(q => EF.Property<DateTime?>(q, "CompletedAt") != null &&
+                            EF.Property<DateTime?>(q, "CompletedAt")!.Value >= DateTime.UtcNow.AddDays(-30))
+                .Select(q => EF.Property<Guid>(q, "UserId"))
+                .Distinct()
+                .CountAsync(ct);
+
+            return new SystemMetricsDto(totalSchools, totalTeachers, totalStudents, totalExperiments, mau);
+        }
 
         public async Task<LeaderboardDto> GetLeaderboardAsync(Guid schoolId, int take, CancellationToken ct)
         {
             take = Math.Clamp(take <= 0 ? 10 : take, 1, 50);
 
-            // Student id/name may not be on QuizAttempt navigation -> pull attempts, then join Users by UserId/StudentId
-            var qa = await _db.QuizAttempts
-                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId),
-                      q => q.ClassroomId, c => c.Id, (q, c) => q)
+            var qa = await _db.QuizAttempts.AsNoTracking()
+                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), q => q.ClassroomId, c => c.Id, (q, _) => q)
                 .Select(q => new
                 {
-                    AttemptId = EF.Property<Guid>(q, "Id"),
-                    UserId = EF.Property<Guid>(q, "UserId"),
-                    Score = (double?)EF.Property<double?>(q, "Score")
-                            ?? (double?)EF.Property<decimal?>(q, "Percentage")
-                            ?? (double?)EF.Property<double?>(q, "ScorePercent")
-                            ?? 0.0
+                    q.UserId,
+                    Score = (double)(q.Score0to1 * 100m)
                 })
                 .ToListAsync(ct);
 
-            var studentAgg = qa
-                .GroupBy(x => x.UserId)
-                .Select(g => new { UserId = g.Key, Score = g.Average(y => y.Score) })
-                .OrderByDescending(x => x.Score)
-                .Take(take)
+            var top = qa.GroupBy(x => x.UserId)
+                        .Select(g => new { UserId = g.Key, Points = g.Average(y => y.Score) })
+                        .OrderByDescending(x => x.Points)
+                        .Take(take)
+                        .ToList();
+
+            var ids = top.Select(t => t.UserId).ToList();
+            var users = await _db.Users.Where(u => ids.Contains(u.Id))
+                                       .Select(u => new { u.Id, u.FullName })
+                                       .ToListAsync(ct);
+
+            var entries = top.Select((x, i) =>
+
+                new DashboardLeaderboardEntry(x.UserId, users.FirstOrDefault(u => u.Id == x.UserId)?.FullName ?? "(Student)", null,
+                                     (int)Math.Round(x.Points), i + 1))
                 .ToList();
 
-            var userIds = studentAgg.Select(x => x.UserId).ToList();
-            var users = await _db.Users.Where(u => userIds.Contains(u.Id)).Select(u => new { u.Id, u.FullName }).ToListAsync(ct);
-
-            var studentRanks = studentAgg
-                .Select((x, i) => new StudentRank(x.UserId, users.FirstOrDefault(u => u.Id == x.UserId)?.FullName ?? "(Student)", Math.Round(x.Score, 2), i + 1))
-                .ToList();
-
-            // Teachers by assignment count (CreatedById/TeacherId fallback)
-            var asg = await _db.Assignments
-                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId),
-                      a => a.ClassroomId, c => c.Id, (a, c) => a)
-                .Select(a => new
-                {
-                    TeacherId = (Guid?)EF.Property<Guid?>(a, "TeacherId") ?? EF.Property<Guid?>(a, "CreatedById")
-                })
-                .Where(x => x.TeacherId != null)
-                .GroupBy(x => x.TeacherId!.Value)
-                .Select(g => new { TeacherId = g.Key, Activities = g.Count() })
-                .OrderByDescending(x => x.Activities)
-                .Take(take)
-                .ToListAsync(ct);
-
-            var tIds = asg.Select(x => x.TeacherId).ToList();
-            var tUsers = await _db.Users.Where(u => tIds.Contains(u.Id)).Select(u => new { u.Id, u.FullName }).ToListAsync(ct);
-
-            var teacherRanks = asg
-                .Select((t, i) => new TeacherRank(t.TeacherId, tUsers.FirstOrDefault(u => u.Id == t.TeacherId)?.FullName ?? "(Teacher)", t.Activities, i + 1))
-                .ToList();
-
-            return new LeaderboardDto(studentRanks, teacherRanks, /*RegionalCompare*/ null);
+            return new LeaderboardDto(entries, entries.Count, 1, entries.Count);
         }
 
         public async Task<BillingDto> GetBillingAsync(Guid schoolId, CancellationToken ct)
@@ -471,7 +317,38 @@ namespace BlueSandsLMS.Application.Services.Dashboard
                 .OrderByDescending(s => s.EndsAt)
                 .FirstOrDefaultAsync(ct);
 
-            var payments = await _db.Payments.Where(p => p.SchoolId == schoolId)
+            var seatsUsed = await _db.Users.CountAsync(u => u.SchoolId == schoolId && u.Role!.Name == "Student" && u.IsActive, ct);
+
+
+            var isTrial = sub?.LastPaymentReference == "TRIAL";
+            var now      = DateTime.UtcNow;
+            var daysLeft = sub?.EndsAt != null
+                ? Math.Max(0, (int)Math.Ceiling((sub.EndsAt - now).TotalDays))
+                : 0;
+
+            var planName = isTrial ? "Free Trial"
+                         : sub != null ? "Standard"
+                         : "None";
+
+            var planStatus = isTrial
+                ? (sub!.Active && sub.EndsAt >= now
+                    ? $"Trial — {daysLeft} day{(daysLeft == 1 ? "" : "s")} remaining"
+                    : "Trial expired")
+                : ((sub?.Active ?? false) ? "Active" : "Inactive");
+
+            var subscription = new SubscriptionCardDto(
+                planName,
+                planStatus,
+                sub?.StartsAt,
+                sub?.EndsAt,
+                sub?.StudentsCovered ?? 0,
+                seatsUsed,
+                isTrial ? "Trial" : "Manual"
+            );
+
+
+            var payments = await _db.Payments.AsNoTracking()
+                .Where(p => p.SchoolId == schoolId)
                 .OrderByDescending(p => p.DateCreated).Take(20)
                 .Select(p => new PaymentRow(
                     p.Id,
@@ -480,22 +357,33 @@ namespace BlueSandsLMS.Application.Services.Dashboard
                     p.DateCreated,
                     p.Reference,
                     p.PromoCode
-                ))
+                )
+                {
+                    Currency = p.Currency,
+                    Method   = p.Provider
+                })
                 .ToListAsync(ct);
 
-            return new BillingDto(
-                new SubscriptionCardDto(
-                    sub?.EndsAt >= DateTimeOffset.UtcNow,
-                    "Standard",
-                    sub?.StudentsCovered ?? 0,
-                    sub?.EndsAt,
-                    sub is null ? 0 : Math.Max(0, (sub.EndsAt - DateTimeOffset.UtcNow).Days)
-                ),
-                payments
-            );
+
+            var tiers = await _db.PricingTiers.AsNoTracking()
+                .OrderBy(t => t.MinStudents)
+                .Select(t => new TierSummaryDto
+                {
+                    Id               = t.Id,
+                    TierName         = t.TierName,
+                    MinStudents      = t.MinStudents,
+                    MaxStudents      = t.MaxStudents,
+                    PricePerStudent  = t.PricePerStudent,
+                    IsMatch          = sub != null &&
+                                       sub.StudentsCovered >= t.MinStudents &&
+                                       sub.StudentsCovered <= t.MaxStudents
+                })
+                .ToListAsync(ct);
+
+            return new BillingDto(subscription, payments) { AvailableTiers = tiers };
         }
 
-        // ===============  Ops (legacy interface)  ===============
+
 
         public async Task<UpsertResultDto> UpsertTeacherAsync(Guid adminUserId, Guid schoolId, UpsertTeacherDto dto)
             => await UpsertUserForSchoolAsync(schoolId, dto.Email, dto.FullName, dto.Phone, dto.Country, "Teacher", CancellationToken.None);
@@ -521,7 +409,6 @@ namespace BlueSandsLMS.Application.Services.Dashboard
             return results;
         }
 
-        // Members required by your ISchoolAdminService (Ops)
         public async Task<Guid> CreateUserAsync(Guid schoolId, CreateUserRequest req, CancellationToken ct)
         {
             var res = await UpsertUserForSchoolAsync(schoolId, req.Email, req.FullName, null, null, req.Role, ct);
@@ -532,17 +419,16 @@ namespace BlueSandsLMS.Application.Services.Dashboard
         {
             var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct)
                        ?? throw new InvalidOperationException("User not found");
-            var oldSchoolId = user.SchoolId ?? Guid.Empty;
 
             var targetRole = await _db.Roles.FirstOrDefaultAsync(r => r.Name == role, ct)
                              ?? throw new Exception($"Role '{role}' not found.");
-            user.RoleId = targetRole.Id;
 
+            user.RoleId = targetRole.Id;
             await _db.SaveChangesAsync(ct);
-            if (oldSchoolId != Guid.Empty) _cacheBust.InvalidateSchoolAdmin(oldSchoolId);
+
+            if (user.SchoolId is Guid sid) _cacheBust.InvalidateSchoolAdmin(sid);
         }
 
-        // core helper
         private async Task<UpsertResultDto> UpsertUserForSchoolAsync(
             Guid schoolId, string email, string fullName, string? phone, string? country, string roleName, CancellationToken ct)
         {
@@ -554,18 +440,21 @@ namespace BlueSandsLMS.Application.Services.Dashboard
 
             if (user == null)
             {
-                var newUser = new User
-                {
-                    Id = Guid.NewGuid(),
-                    Email = email,
-                    FullName = fullName,
-                    Phone = phone ?? "",
-                    Country = country ?? "",
-                    RoleId = targetRole.Id,
-                    SchoolId = schoolId,
-                    DateCreated = DateTime.UtcNow,
-                    IsActive = true
-                };
+
+var newUser = new Core.Entities.User
+{
+    Id = Guid.NewGuid(),
+    Email = email,
+    FullName = fullName,
+    Phone = phone ?? "",
+    Country = country ?? "",
+    RoleId = targetRole.Id,
+    SchoolId = schoolId,
+    DateCreated = DateTime.UtcNow,
+    IsActive = true,
+    PasswordHash = BCrypt.Net.BCrypt.HashPassword(Guid.NewGuid().ToString())
+};
+
                 _db.Users.Add(newUser);
                 await _db.SaveChangesAsync(ct);
                 _cacheBust.InvalidateSchoolAdmin(schoolId);
@@ -587,7 +476,6 @@ namespace BlueSandsLMS.Application.Services.Dashboard
             return new UpsertResultDto(email, "updated", user.Id, roleName, schoolId);
         }
 
-        // CSV bulk upload
         public async Task<BulkUploadResult> BulkUploadUsersCsvAsync(Guid schoolId, byte[] csvBytes, CancellationToken ct)
         {
             var errors = new List<string>();
@@ -642,7 +530,7 @@ namespace BlueSandsLMS.Application.Services.Dashboard
                             bool has = await _db.Enrollments.AnyAsync(e => e.ClassroomId == classroom.Id && e.UserId == res.UserId, ct);
                             if (!has)
                             {
-                                _db.Enrollments.Add(new Enrollment
+                                _db.Enrollments.Add(new Core.Entities.Enrollment
                                 {
                                     Id = Guid.NewGuid(),
                                     ClassroomId = classroom.Id,

@@ -5,10 +5,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace BlueSandsLMS.Infrastructure.Migrations
 {
-    /// <inheritdoc />
+
     public partial class RemoveDobAndGenderFromSchoolAuth : Migration
     {
-        /// <inheritdoc />
+
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(
@@ -20,7 +20,7 @@ namespace BlueSandsLMS.Infrastructure.Migrations
                 table: "Users");
         }
 
-        /// <inheritdoc />
+
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<string>(

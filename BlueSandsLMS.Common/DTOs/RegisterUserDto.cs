@@ -8,9 +8,9 @@ namespace BlueSandsLMS.Common.DTOs
     public string? Phone { get; set; }
     public string? Gender { get; set; }
     public string? Country { get; set; }
-   // public string? Dob { get; set; }
 
-    // NEW
+
+
     public string? CouponCode { get; set; }
 }
 

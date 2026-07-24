@@ -1,4 +1,4 @@
-// Api/Controllers/StudentActionsV1Controller.cs
+
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using BlueSandsLMS.Common.DTOs.Student;
@@ -18,9 +18,9 @@ public class StudentActionsV1Controller : ControllerBase
         var sub = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
         if (!Guid.TryParse(sub, out var id))
         {
-            // Prefer returning 401 instead of throwing 500
+
             Response.StatusCode = StatusCodes.Status401Unauthorized;
-            // Throw to short-circuit the action; DevExceptionPage will show 401 status
+
             throw new InvalidOperationException("Missing or invalid user id claim.");
         }
         return id;

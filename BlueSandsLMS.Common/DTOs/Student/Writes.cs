@@ -1,6 +1,6 @@
 namespace BlueSandsLMS.Common.DTOs.Student
 {
-    public record StartExperimentRequest(string ExperimentName, string Subject, string Mode, Guid? ClassroomId);
+    public record StartExperimentRequest(Guid? PhETSimulationId, string ExperimentName, string Subject, string Mode, Guid? ClassroomId);
     public record StartExperimentResponse(Guid LaunchId);
 
     public record SaveExperimentProgressRequest(int LastStep);
@@ -11,7 +11,7 @@ namespace BlueSandsLMS.Common.DTOs.Student
     public record SubmitQuizRequest(
         string Subject,
         string QuizCode,
-        string Type,                // "pre" | "post"
+        string Type,
         Guid? ExperimentLaunchId,
         List<SubmitQuizQuestion> Questions);
 

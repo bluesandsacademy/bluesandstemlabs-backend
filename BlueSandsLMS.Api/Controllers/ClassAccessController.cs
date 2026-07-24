@@ -11,19 +11,20 @@ namespace BlueSandsLMS.Api.Controllers
 {
     [ApiController]
     [Route("api/class-access")]
-    [Authorize] // any authenticated user
+    [Authorize]
     public class ClassAccessController : ControllerBase
     {
         private readonly IClassRepository _repo;
         public ClassAccessController(IClassRepository repo) => _repo = repo;
+         
+         private Guid UserId()
 
-        private Guid UserId()
         {
             var sub = User.FindFirstValue("sub") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
             return Guid.Parse(sub!);
         }
 
-        /// <summary>List classes I belong to (as Teacher or Student)</summary>
+
         [HttpGet("mine")]
         public async Task<ActionResult<ClassSummaryDto[]>> Mine()
         {
@@ -31,12 +32,12 @@ namespace BlueSandsLMS.Api.Controllers
             return Ok(list.ToArray());
         }
 
-        /// <summary>Rotate invite code for a class (teacher only)</summary>
+
         [HttpPost("{classId:guid}/rotate-invite")]
         [Authorize(Roles = "Teacher,SchoolAdmin")]
         public async Task<IActionResult> RotateInvite(Guid classId, [FromBody] RotateInviteCodeDto body)
         {
-            // only teacher of this class (or school admin who is also teacher, per your policy)
+
             var me = UserId();
             var isTeacher = await _repo.UserIsTeacherAsync(classId, me);
             if (!isTeacher) return Forbid();
@@ -45,14 +46,14 @@ namespace BlueSandsLMS.Api.Controllers
             return Ok(new { code, expiresAt = expires });
         }
 
-        /// <summary>Join a class by invite code (students)</summary>
+
         [HttpPost("join")]
-        [Authorize(Roles = "Student,Teacher,SchoolAdmin")] // allow joining for any non-admin if you want; usually Students
+        [Authorize(Roles = "Student,Teacher,SchoolAdmin")]
         public async Task<IActionResult> Join([FromBody] JoinByCodeDto body)
         {
             if (string.IsNullOrWhiteSpace(body.Code)) return BadRequest("code required.");
             await _repo.JoinByCodeAsync(UserId(), body.Code);
-            return NoContent();
+            return NoContent ();
         }
     }
 }

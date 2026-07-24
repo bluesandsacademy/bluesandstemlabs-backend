@@ -22,26 +22,92 @@ namespace BlueSandsLMS.Application.Services.Student
 
             var since7 = DateTime.UtcNow.AddDays(-7);
 
-            var exps = await _db.ExperimentLaunches
+
+            var completed = await _db.ExperimentLaunches.AsNoTracking()
+                .CountAsync(x => x.UserId == userId && x.Completed, ct);
+
+            var inprog = await _db.ExperimentLaunches.AsNoTracking()
+                .CountAsync(x => x.UserId == userId && !x.Completed, ct);
+
+            var minutesSec = await _db.ExperimentLaunches.AsNoTracking()
+                .Where(x => x.UserId == userId && x.StartedAt >= since7)
+                .SumAsync(x => (int?)x.DurationSec, ct) ?? 0;
+            var minutes = minutesSec / 60;
+
+
+            var quizStats = await _db.QuizAttempts.AsNoTracking()
                 .Where(x => x.UserId == userId)
+                .GroupBy(_ => 1)
+                .Select(g => new
+                {
+                    Attempted = g.Count(),
+                    Passed    = g.Count(x => x.Passed),
+                    AvgScore  = g.Average(x => (decimal?)x.Score0to1),
+                    Recent    = g.Max(x => x.CompletedAt)
+                })
+                .FirstOrDefaultAsync(ct);
+
+            var quizzesAttempted = quizStats?.Attempted ?? 0;
+            var quizzesPassed    = quizStats?.Passed ?? 0;
+            var avg = Math.Round((double)((quizStats?.AvgScore ?? 0m) * 100m), 1);
+            var mostRecentAttemptDate = quizStats?.Recent;
+
+            var badges = await _db.BadgeAwards.AsNoTracking()
+                .CountAsync(x => x.UserId == userId, ct);
+
+
+            var myAvg = (quizStats?.AvgScore ?? 0m);
+
+            var myClassIds = await _db.Enrollments.AsNoTracking()
+                .Where(e => e.UserId == userId && e.RoleInClass == Core.Entities.ClassRole.Student)
+                .Select(e => e.ClassroomId)
+                .Distinct()
                 .ToListAsync(ct);
 
-            var completed = exps.Count(x => x.EndedAt != null);
-            var inprog = exps.Count(x => x.EndedAt == null);
-            var minutes = exps.Where(x => x.StartedAt >= since7).Sum(x =>
+            int classRank = 1;
+            if (myClassIds.Count > 0)
             {
-                var end = x.EndedAt ?? DateTime.UtcNow;
-                return (int)Math.Max(0, (end - x.StartedAt).TotalMinutes);
-            });
+                var peerIds = await _db.Enrollments.AsNoTracking()
+                    .Where(e => myClassIds.Contains(e.ClassroomId)
+                             && e.RoleInClass == Core.Entities.ClassRole.Student
+                             && e.UserId != userId)
+                    .Select(e => e.UserId)
+                    .Distinct()
+                    .ToListAsync(ct);
 
-            var attempts = await _db.QuizAttempts.Where(x => x.UserId == userId).ToListAsync(ct);
-            var avg = attempts.Count == 0 ? 0.0 : Math.Round(attempts.Average(a => (double)(a.Score0to1 * 100m)), 1);
+                var betterInClass = await _db.QuizAttempts.AsNoTracking()
+                    .Where(q => peerIds.Contains(q.UserId))
+                    .GroupBy(q => q.UserId)
+                    .Where(g => g.Average(x => x.Score0to1) > myAvg)
+                    .CountAsync(ct);
 
-            var badges = await _db.BadgeAwards.CountAsync(x => x.UserId == userId, ct);
+                classRank = betterInClass + 1;
+            }
 
-            // TODO: compute real ranks (class/school) later
-            var classRank = 1;
-            var schoolRank = 1;
+            int schoolRank = 1;
+            var userSchoolId = await _db.Users.AsNoTracking()
+                .Where(u => u.Id == userId)
+                .Select(u => u.SchoolId)
+                .FirstOrDefaultAsync(ct);
+
+            if (userSchoolId.HasValue)
+            {
+                var schoolStudentIds = await _db.Users.AsNoTracking()
+                    .Where(u => u.SchoolId == userSchoolId.Value
+                             && u.IsActive
+                             && u.Role!.Name == "Student"
+                             && u.Id != userId)
+                    .Select(u => u.Id)
+                    .ToListAsync(ct);
+
+                var betterInSchool = await _db.QuizAttempts.AsNoTracking()
+                    .Where(q => schoolStudentIds.Contains(q.UserId))
+                    .GroupBy(q => q.UserId)
+                    .Where(g => g.Average(x => x.Score0to1) > myAvg)
+                    .CountAsync(ct);
+
+                schoolRank = betterInSchool + 1;
+            }
 
             var dto = new StudentOverviewDto(
                 CompletedExperiments: completed,
@@ -51,9 +117,14 @@ namespace BlueSandsLMS.Application.Services.Student
                 MinutesInLab7d: minutes,
                 RankClass: classRank,
                 RankSchool: schoolRank,
-                Greeting: "Welcome back 👋",
+                Greeting: "Welcome back",
                 Recommendations: new[] { "Complete your pending experiment", "Try a post-assessment quiz" }
-            );
+            )
+            {
+                QuizzesAttempted      = quizzesAttempted,
+                QuizzesPassed         = quizzesPassed,
+                MostRecentAttemptDate = mostRecentAttemptDate
+            };
 
             _cache.Set(key, dto, TimeSpan.FromMinutes(2));
             return dto;
@@ -77,12 +148,18 @@ namespace BlueSandsLMS.Application.Services.Student
         {
             take = Math.Clamp(take <= 0 ? 20 : take, 1, 100);
 
+
             return await _db.ExperimentLaunches
+                .AsNoTracking()
                 .Where(x => x.UserId == userId)
                 .OrderByDescending(x => x.StartedAt)
                 .Take(take)
                 .Select(x => new StudentExperimentDto(
-                    x.Id, x.Subject, x.ExperimentName, x.Mode, x.LastStep, x.StartedAt, x.EndedAt))
+                    x.Id, x.Subject, x.ExperimentName, x.Mode, x.LastStep, x.StartedAt, x.EndedAt)
+                {
+                    Completed       = x.Completed,
+                    DurationMinutes = x.DurationSec / 60
+                })
                 .ToListAsync(ct);
         }
 

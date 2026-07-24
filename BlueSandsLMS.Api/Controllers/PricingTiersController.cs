@@ -1,3 +1,4 @@
+using System.Linq;
 using BlueSandsLMS.Common.DTOs;
 using BlueSandsLMS.Core.Entities;
 using BlueSandsLMS.Infrastructure;
@@ -23,7 +24,7 @@ namespace BlueSandsLMS.Api.Controllers
             if (dto.MaxStudents <= dto.MinStudents) return BadRequest(new { message = "Maximum Students must be > Minimum Students." });
             if (dto.PricePerStudent < 0) return BadRequest(new { message = "Price must be ≥ 0." });
 
-            // Overlap check: reject if !(new.max < existing.min || new.min > existing.max)
+
             var overlap = await _db.PricingTiers
                 .Where(t => !(dto.MaxStudents < t.MinStudents || dto.MinStudents > t.MaxStudents))
                 .OrderBy(t => t.MinStudents)

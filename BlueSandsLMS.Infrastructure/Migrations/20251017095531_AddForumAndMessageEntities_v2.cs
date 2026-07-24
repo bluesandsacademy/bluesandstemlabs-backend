@@ -5,10 +5,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace BlueSandsLMS.Infrastructure.Migrations
 {
-    /// <inheritdoc />
+
     public partial class AddForumAndMessageEntities_v2 : Migration
     {
-        /// <inheritdoc />
+
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
@@ -138,7 +138,7 @@ namespace BlueSandsLMS.Infrastructure.Migrations
                 column: "ToUserId");
         }
 
-        /// <inheritdoc />
+
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

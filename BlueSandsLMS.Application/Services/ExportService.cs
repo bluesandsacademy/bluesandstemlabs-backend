@@ -3,6 +3,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using BlueSandsLMS.Common.Interfaces;
+using BlueSandsLMS.Core.Entities;
 using BlueSandsLMS.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,7 +21,7 @@ namespace BlueSandsLMS.Application.Services
                 where a.ClassroomId == classId
                 join s in _db.Submissions on a.Id equals s.AssignmentId into gj
                 from s in gj.DefaultIfEmpty()
-                join u in _db.Users on s.StudentId equals u.Id into uj   // ✅ use StudentId
+                join u in _db.Users on s.StudentId equals u.Id into uj
                 from u in uj.DefaultIfEmpty()
                 orderby a.DueAt, u.FullName
                 select new
@@ -31,7 +32,7 @@ namespace BlueSandsLMS.Application.Services
                     Student = u.FullName,
                     StudentEmail = u.Email,
                     Status = s == null ? "NotSubmitted" : s.Status.ToString(),
-                    // ✅ export percentage; if null, stays null
+
                     ScorePercent = s == null ? (decimal?)null : (s.Score0to1 * 100m),
                     SubmittedAt = s == null ? (DateTime?)null : s.SubmittedAt,
                     GradedAt = s == null ? (DateTime?)null : s.GradedAt
@@ -101,7 +102,7 @@ namespace BlueSandsLMS.Application.Services
     {
         UserId   = g.Key,
         Attempts = g.Count(),
-        // Force nullable average, then coalesce
+
         Avg      = (g.Average(x => (decimal?)x.Score0to1) ?? 0m) * 100m
     })
     .ToListAsync();
@@ -128,7 +129,82 @@ namespace BlueSandsLMS.Application.Services
             return Encoding.UTF8.GetBytes(sb.ToString());
         }
 
-        // CSV helpers
+
+        public async Task<byte[]> ExportEngagementCsvAsync(Guid teacherId, Guid? classroomId, DateTime fromUtc, DateTime toUtc)
+        {
+
+            var fromEnrollments = await _db.Enrollments
+                .AsNoTracking()
+                .Where(e => e.UserId == teacherId && e.RoleInClass == Core.Entities.ClassRole.Teacher)
+                .Select(e => e.ClassroomId)
+                .ToListAsync();
+
+            var fromAssignment = await _db.ClassroomTeachers
+                .AsNoTracking()
+                .Where(ct => ct.TeacherUserId == teacherId)
+                .Select(ct => ct.ClassroomId)
+                .ToListAsync();
+
+            var classIds = fromEnrollments.Union(fromAssignment).Distinct().ToList();
+            if (classroomId.HasValue) classIds = classIds.Where(id => id == classroomId.Value).ToList();
+
+            if (classIds.Count == 0) return Encoding.UTF8.GetBytes("No classes found for this teacher.\r\n");
+
+            var studentIds = await _db.Enrollments
+                .AsNoTracking()
+                .Where(e => classIds.Contains(e.ClassroomId) && e.RoleInClass == Core.Entities.ClassRole.Student)
+                .Select(e => e.UserId)
+                .Distinct()
+                .ToListAsync();
+
+            var users = await _db.Users
+                .AsNoTracking()
+                .Where(u => studentIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.FullName, u.Email })
+                .ToListAsync();
+
+            var experiments = await _db.ExperimentLaunches
+                .AsNoTracking()
+                .Where(e => studentIds.Contains(e.UserId) && e.StartedAt >= fromUtc && e.StartedAt <= toUtc)
+                .GroupBy(e => e.UserId)
+                .Select(g => new { UserId = g.Key, Launches = g.Count(), CompletedLabs = g.Count(x => x.Completed), TimeSec = g.Sum(x => (int?)x.DurationSec) ?? 0 })
+                .ToListAsync();
+
+            var quizzes = await _db.QuizAttempts
+                .AsNoTracking()
+                .Where(q => studentIds.Contains(q.UserId) && q.CompletedAt >= fromUtc && q.CompletedAt <= toUtc)
+                .GroupBy(q => q.UserId)
+                .Select(g => new { UserId = g.Key, Attempts = g.Count(), Passed = g.Count(x => x.Passed), Avg = (g.Average(x => (decimal?)x.Score0to1) ?? 0m) * 100m })
+                .ToListAsync();
+
+            var submissions = await _db.Submissions
+                .AsNoTracking()
+                .Where(s => s.SubmittedAt >= fromUtc && s.SubmittedAt <= toUtc)
+                .Join(_db.Assignments.Where(a => classIds.Contains(a.ClassroomId)), s => s.AssignmentId, a => a.Id, (s, _) => s)
+                .GroupBy(s => s.StudentId)
+                .Select(g => new { UserId = g.Key, Count = g.Count() })
+                .ToListAsync();
+
+            var sb = new StringBuilder();
+            Header(sb, "StudentId,FullName,Email,ExperimentLaunches,CompletedLabs,TimeSpentMins,QuizAttempts,QuizzesPassed,AvgQuizScore,AssignmentSubmissions");
+
+            foreach (var u in users.OrderBy(u => u.FullName))
+            {
+                var e = experiments.FirstOrDefault(x => x.UserId == u.Id);
+                var q = quizzes.FirstOrDefault(x => x.UserId == u.Id);
+                var s = submissions.FirstOrDefault(x => x.UserId == u.Id);
+                Line(sb,
+                    u.Id, u.FullName, u.Email,
+                    e?.Launches ?? 0, e?.CompletedLabs ?? 0, (e?.TimeSec ?? 0) / 60,
+                    q?.Attempts ?? 0, q?.Passed ?? 0,
+                    q?.Avg is decimal d ? Math.Round(d, 1) : 0m,
+                    s?.Count ?? 0);
+            }
+
+            return Encoding.UTF8.GetBytes(sb.ToString());
+        }
+
+
         private static void Header(StringBuilder sb, string header) => sb.AppendLine(header);
         private static void Line(StringBuilder sb, params object?[] cols)
         {

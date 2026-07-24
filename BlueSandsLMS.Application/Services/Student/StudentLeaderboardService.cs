@@ -1,74 +1,78 @@
+using System;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using BlueSandsLMS.Common.DTOs;
 using BlueSandsLMS.Common.DTOs.Dashboard;
 using BlueSandsLMS.Common.Interfaces.Student;
 using BlueSandsLMS.Infrastructure;
 using Microsoft.EntityFrameworkCore;
+ using DashboardLeaderboardEntry = BlueSandsLMS.Common.DTOs.LeaderboardEntry;
 
 namespace BlueSandsLMS.Application.Services.Student
 {
+   
+
     public sealed class StudentLeaderboardService : IStudentLeaderboardService
     {
         private readonly BlueSandsLMSDbContext _db;
-
+        
         public StudentLeaderboardService(BlueSandsLMSDbContext db) => _db = db;
 
-        public async Task<LeaderboardDto> GetAsync(Guid userId, string scope, int take, CancellationToken ct)
+
+        public async Task<LeaderboardDto> GetLeaderboardAsync(Guid studentId, string scope, CancellationToken ct)
         {
-            take = Math.Clamp(take <= 0 ? 10 : take, 1, 50);
+            int take = 10;
 
-            // resolve scope → filter user set
+            take = Math.Clamp(take, 1, 50);
+
             IQueryable<Guid> population = _db.Users.Select(u => u.Id);
-
-            var me = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct)
+            
+            var me = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == studentId, ct)
                      ?? throw new InvalidOperationException("User not found");
 
             if (string.Equals(scope, "class", StringComparison.OrdinalIgnoreCase))
             {
-                var classIds = await _db.Enrollments.Where(e => e.UserId == userId)
+                var classIds = await _db.Enrollments.Where(e => e.UserId == studentId)
                                   .Select(e => e.ClassroomId).ToListAsync(ct);
-
-                population = _db.Enrollments.Where(e => classIds.Contains(e.ClassroomId))
-                              .Select(e => e.UserId).Distinct();
+                population = _db.Enrollments.Where(e => classIds.Contains(e.ClassroomId)).Select(e => e.UserId).Distinct();
             }
             else if (string.Equals(scope, "school", StringComparison.OrdinalIgnoreCase))
             {
                 if (me.SchoolId is Guid sid && sid != Guid.Empty)
                     population = _db.Users.Where(u => u.SchoolId == sid).Select(u => u.Id);
                 else
-                    population = _db.Users.Where(u => u.Id == userId).Select(u => u.Id); // fallback
+                    population = _db.Users.Where(u => u.Id == studentId).Select(u => u.Id);
             }
-            // "national" (default/global) → keep all users
 
             var qa = await _db.QuizAttempts
-                .Where(q => population.Contains(EF.Property<Guid>(q, "UserId")))
-                .Select(q => new
-                {
-                    UserId = EF.Property<Guid>(q, "UserId"),
-                    Score = (double?)EF.Property<double?>(q, "Score")
-                          ?? (double?)EF.Property<decimal?>(q, "Percentage")
-                          ?? (double?)EF.Property<double?>(q, "ScorePercent")
-                          ?? 0.0
-                })
+                .AsNoTracking()
+                .Where(q => population.Contains(q.UserId))
+                .Select(q => new { q.UserId, Score = (double)(q.Score0to1 * 100m) })
                 .ToListAsync(ct);
 
-            var ranks = qa.GroupBy(x => x.UserId)
-                .Select(g => new { UserId = g.Key, Score = g.Average(y => y.Score) })
-                .OrderByDescending(x => x.Score)
-                .Take(take)
-                .ToList();
+            var top = qa.GroupBy(x => x.UserId)
+                        .Select(g => new { UserId = g.Key, Points = g.Average(y => y.Score) })
+                        .OrderByDescending(x => x.Points)
+                        .Take(take)
+                        .ToList();
 
-            var ids = ranks.Select(r => r.UserId).ToList();
+            var ids = top.Select(t => t.UserId).ToList();
             var users = await _db.Users.Where(u => ids.Contains(u.Id))
                           .Select(u => new { u.Id, u.FullName })
                           .ToListAsync(ct);
 
-            var studentRanks = ranks.Select((r, i) =>
-                new StudentRank(r.UserId,
-                    users.FirstOrDefault(u => u.Id == r.UserId)?.FullName ?? "(Student)",
-                    Math.Round(r.Score, 2),
-                    i + 1)).ToList();
+            var entries = top.Select((r, i) =>
 
-            // Teacher list not required on student leaderboard (return empty)
-            return new LeaderboardDto(studentRanks, new List<TeacherRank>(), null);
+                new DashboardLeaderboardEntry(
+                    r.UserId,
+                    users.FirstOrDefault(u => u.Id == r.UserId)?.FullName ?? "(Student)",
+                    null,
+                    (int)Math.Round(r.Points),
+                    i + 1))
+                .ToList();
+
+            return new LeaderboardDto(entries, entries.Count, 1, entries.Count);
         }
     }
 }

@@ -14,7 +14,7 @@ namespace BlueSandsLMS.Core.Entities
         public decimal Score0to1 { get; set; }
         public DateTime StartedAt { get; set; } = DateTime.UtcNow;
         public DateTime? CompletedAt { get; set; }
-         public string? Type { get; set; }              // pre|post
+         public string? Type { get; set; }
     public Guid? ExperimentLaunchId { get; set; }
     public DateTime DateCreated { get; set; } = DateTime.UtcNow;
 

@@ -28,6 +28,7 @@ namespace BlueSandsLMS.Application.Services
         private readonly IPricingService _pricing;
         private readonly HttpClient _http;
         private readonly IConfiguration _cfg;
+        private readonly string? _paystackSecretKey;
 
         public PaymentService(
             BlueSandsLMSDbContext db,
@@ -39,20 +40,39 @@ namespace BlueSandsLMS.Application.Services
             _db = db;
             _pricing = pricing;
             _cfg = cfg;
-              _cacheBust = cacheBust;
+            _cacheBust = cacheBust;
+
+
+            _paystackSecretKey = cfg["Payments:Paystack:SecretKey"];
 
             _http = httpFactory.CreateClient();
-            // ✅ correct Paystack base URL
             _http.BaseAddress = new Uri("https://api.paystack.co/");
-            var secret = _cfg["Paystack:SecretKey"];
-            if (string.IsNullOrWhiteSpace(secret))
-                throw new InvalidOperationException("Paystack:SecretKey is not configured. Set it via environment variables (web.config).");
 
-            _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", secret);
+            if (!string.IsNullOrWhiteSpace(_paystackSecretKey))
+            {
+                _http.DefaultRequestHeaders.Authorization =
+                    new AuthenticationHeaderValue("Bearer", _paystackSecretKey);
+            }
         }
 
         public async Task<InitPaymentResponse> InitializeAsync(InitPaymentRequest req, ClaimsPrincipal? user)
         {
+            if (_cfg.GetValue<bool>("Testing:AllowFakePaystackInit"))
+            {
+                if (req.Students < 1) throw new ArgumentException("Students must be >= 1.");
+                if (string.IsNullOrWhiteSpace(req.ContactEmail)) throw new ArgumentException("ContactEmail is required.");
+
+                var fakeReference = $"BS-TEST-{Guid.NewGuid():N}";
+                return new InitPaymentResponse(
+                    $"https://paystack.test/checkout/{fakeReference}",
+                    "test_access_code",
+                    fakeReference);
+            }
+
+            if (string.IsNullOrWhiteSpace(_paystackSecretKey))
+                throw new InvalidOperationException(
+                    "Paystack is not configured. Cannot initialize online payment. Please use manual payment registration instead.");
+
             if (req.Students < 1) throw new ArgumentException("Students must be ≥ 1.");
             if (string.IsNullOrWhiteSpace(req.ContactEmail)) throw new ArgumentException("ContactEmail is required.");
 
@@ -67,11 +87,22 @@ namespace BlueSandsLMS.Application.Services
             var sub = user?.FindFirst("sub")?.Value ?? user?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (Guid.TryParse(sub, out var uid)) userId = uid;
 
+
+            string schoolCurrency = "NGN";
+            if (req.SchoolId != Guid.Empty)
+            {
+                schoolCurrency = await _db.Schools
+                    .Where(s => s.Id == req.SchoolId)
+                    .Select(s => s.Currency)
+                    .FirstOrDefaultAsync() ?? "NGN";
+            }
+
             var p = new Payment
             {
                 SchoolId = req.SchoolId,
                 UserId = userId,
                 Reference = reference,
+                Currency = schoolCurrency,
                 AmountKobo = amountKobo,
                 Subtotal = subtotal,
                 Vat = vat,
@@ -84,18 +115,17 @@ namespace BlueSandsLMS.Application.Services
             _db.Payments.Add(p);
             await _db.SaveChangesAsync();
 
-            // ✅ Frontend URL fallback (supports both keys)
             var callbackBase =
-    (_cfg["Frontend:BaseUrl"] ??
-     _cfg["App:FrontendBaseUrl"] ??
-     "https://app.bluesandstemlabs.com").TrimEnd('/');
+                (_cfg["Frontend:BaseUrl"] ??
+                 _cfg["App:FrontendBaseUrl"] ??
+                 "https://app.bluesandstemlabs.com").TrimEnd('/');
 
             var payload = new
             {
                 email = req.ContactEmail.Trim(),
-                amount = amountKobo,     // kobo
+                amount = amountKobo,
                 reference,
-                currency = "NGN",
+                currency = schoolCurrency,
                 callback_url = $"{callbackBase}/billing/verify"
             };
 
@@ -118,36 +148,86 @@ namespace BlueSandsLMS.Application.Services
 
         public async Task<VerifyPaymentResponse> VerifyAsync(string reference)
         {
+            if (string.IsNullOrWhiteSpace(reference))
+                throw new ArgumentException("Payment reference is required");
+
+            reference = reference.Trim();
+
+
+            var p = await _db.Payments.FirstOrDefaultAsync(x => x.Reference == reference);
+
+
+            if (p == null) return new VerifyPaymentResponse(false, reference);
+
+
+            if (p.Status == PaymentStatus.Paid)
+                return new VerifyPaymentResponse(true, reference);
+
+
+            if (string.Equals(p.RawResponse, "manual-registration", StringComparison.OrdinalIgnoreCase))
+            {
+                if (p.Status != PaymentStatus.Paid)
+                {
+                    p.Status = PaymentStatus.Paid;
+                    await ActivateSubscriptionAsync(p);
+                    await _db.SaveChangesAsync();
+
+                    if (p.SchoolId != Guid.Empty)
+                        _cacheBust?.InvalidateSchoolAdmin(p.SchoolId);
+                }
+                return new VerifyPaymentResponse(true, reference);
+            }
+
+
+            if (string.IsNullOrWhiteSpace(_paystackSecretKey))
+                throw new InvalidOperationException("Paystack is not configured. Cannot verify online payment.");
+
             var res = await _http.GetAsync($"transaction/verify/{reference}");
             var json = await res.Content.ReadAsStringAsync();
 
-            var p = await _db.Payments.FirstOrDefaultAsync(x => x.Reference == reference);
-            if (p != null) { p.RawResponse = json; await _db.SaveChangesAsync(); }
+            p.RawResponse = json;
+            await _db.SaveChangesAsync();
 
-            if (!res.IsSuccessStatusCode) return new VerifyPaymentResponse(false, reference);
+            if (!res.IsSuccessStatusCode)
+                return new VerifyPaymentResponse(false, reference);
 
             using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-            var status   = root.GetProperty("data").GetProperty("status").GetString();   // "success"
-            var amount   = root.GetProperty("data").GetProperty("amount").GetInt32();    // kobo
-            var currency = root.GetProperty("data").GetProperty("currency").GetString();
+            var data = doc.RootElement.GetProperty("data");
+            var status = data.GetProperty("status").GetString();
+            var amount = data.GetProperty("amount").GetInt32();
+            var currency = data.GetProperty("currency").GetString();
 
-            var ok = status == "success" && currency == "NGN" && p != null && amount == p.AmountKobo;
-            if (ok && p!.Status != PaymentStatus.Paid)
+
+            var expectedCurrency = string.IsNullOrWhiteSpace(p.Currency) ? "NGN" : p.Currency;
+            var ok = status == "success" &&
+                     string.Equals(currency, expectedCurrency, StringComparison.OrdinalIgnoreCase) &&
+                     amount == p.AmountKobo;
+            if (!ok) return new VerifyPaymentResponse(false, reference);
+
+            if (p.Status != PaymentStatus.Paid)
             {
                 p.Status = PaymentStatus.Paid;
                 await ActivateSubscriptionAsync(p);
+                await TryIncrementCouponAsync(p.PromoCode);
                 await _db.SaveChangesAsync();
+
+                if (p.SchoolId != Guid.Empty)
+                    _cacheBust?.InvalidateSchoolAdmin(p.SchoolId);
             }
-            return new VerifyPaymentResponse(ok, reference);
+
+            return new VerifyPaymentResponse(true, reference);
         }
 
         public async Task HandleWebhookAsync(string rawBody, string signatureHeader)
         {
-            // x-paystack-signature = HMAC-SHA512(rawBody, SecretKey)
-            var secret = _cfg["Paystack:SecretKey"] ?? throw new InvalidOperationException("Missing Paystack SecretKey");
-            using var hmac = new System.Security.Cryptography.HMACSHA512(Encoding.UTF8.GetBytes(secret));
-            var hash = BitConverter.ToString(hmac.ComputeHash(Encoding.UTF8.GetBytes(rawBody))).Replace("-", "").ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(_paystackSecretKey))
+                throw new InvalidOperationException("Paystack is not configured. Cannot handle webhook.");
+
+
+            using var hmac = new System.Security.Cryptography.HMACSHA512(Encoding.UTF8.GetBytes(_paystackSecretKey));
+            var hash = BitConverter.ToString(hmac.ComputeHash(Encoding.UTF8.GetBytes(rawBody)))
+                .Replace("-", "").ToLowerInvariant();
+
             if (!string.Equals(hash, signatureHeader, StringComparison.OrdinalIgnoreCase))
                 throw new UnauthorizedAccessException("Invalid webhook signature.");
 
@@ -164,16 +244,32 @@ namespace BlueSandsLMS.Application.Services
                     p.Status = PaymentStatus.Paid;
                     p.RawResponse = rawBody;
                     await ActivateSubscriptionAsync(p);
+                    await TryIncrementCouponAsync(p.PromoCode);
                     await _db.SaveChangesAsync();
+
+                    if (p.SchoolId != Guid.Empty)
+                        _cacheBust?.InvalidateSchoolAdmin(p.SchoolId);
                 }
             }
         }
 
-        // 1-month entitlement window (adjust as needed)
+
+        private async Task TryIncrementCouponAsync(string? promoCode)
+        {
+            if (string.IsNullOrWhiteSpace(promoCode)) return;
+            var code = await _db.PromoCodes.FirstOrDefaultAsync(c => c.Code == promoCode.Trim());
+            if (code != null) code.RedemptionCount++;
+
+        }
+
+
         private async Task ActivateSubscriptionAsync(Payment p)
         {
             var now = DateTime.UtcNow;
-            var sub = await _db.Subscriptions.FirstOrDefaultAsync(s => s.SchoolId == p.SchoolId && s.Active);
+
+            var sub = await _db.Subscriptions
+                .FirstOrDefaultAsync(s => s.SchoolId == p.SchoolId && s.Active);
+
             if (sub == null)
             {
                 sub = new Subscription

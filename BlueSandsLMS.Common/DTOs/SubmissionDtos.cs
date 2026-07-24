@@ -2,17 +2,17 @@ using System;
 
 namespace BlueSandsLMS.Common.DTOs
 {
-    // Create or first-time submit
+
     public record SubmitWorkDto(
         Guid AssignmentId,
         string? AttachmentUrl,
         string? AttachmentName,
         long? AttachmentSizeBytes,
         string? AttachmentContentType,
-        string? TextAnswer // optional, if you want freeform text
+        string? TextAnswer
     );
 
-    // Resubmit (same fields allowed)
+
     public record ResubmitWorkDto(
         string? AttachmentUrl,
         string? AttachmentName,
@@ -21,7 +21,7 @@ namespace BlueSandsLMS.Common.DTOs
         string? TextAnswer
     );
 
-    // Listings
+
     public record SubmissionSummaryDto(
         Guid SubmissionId,
         Guid AssignmentId,

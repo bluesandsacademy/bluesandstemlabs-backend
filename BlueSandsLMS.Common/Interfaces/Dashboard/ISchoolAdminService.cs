@@ -1,4 +1,8 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using BlueSandsLMS.Common.DTOs.Dashboard;
+using BlueSandsLMS.Common.DTOs;
 
 namespace BlueSandsLMS.Common.Interfaces.Dashboard
 {
@@ -12,7 +16,6 @@ namespace BlueSandsLMS.Common.Interfaces.Dashboard
         Task<SystemMetricsDto>      GetSystemMetricsAsync(Guid schoolId, int days, CancellationToken ct);
         Task<LeaderboardDto>        GetLeaderboardAsync(Guid schoolId, int take, CancellationToken ct);
         Task<BillingDto>            GetBillingAsync(Guid schoolId, CancellationToken ct);
-
         Task<Guid>                  CreateUserAsync(Guid schoolId, CreateUserRequest req, CancellationToken ct);
         Task<BulkUploadResult>      BulkUploadUsersCsvAsync(Guid schoolId, byte[] csvBytes, CancellationToken ct);
         Task                        AssignRoleAsync(Guid userId, string role, CancellationToken ct);

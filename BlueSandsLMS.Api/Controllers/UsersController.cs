@@ -7,7 +7,7 @@ namespace BlueSandsLMS.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Roles = "GlobalAdmin,SchoolAdmin")]  // <-- Protected
+    [Authorize(Roles = "GlobalAdmin,SchoolAdmin")]
     public class UsersController : ControllerBase
     {
         private readonly IAuthService _auth;

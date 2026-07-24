@@ -6,10 +6,11 @@ namespace BlueSandsLMS.Core.Entities
         public string Email { get; set; } = null!;
         public string FullName { get; set; } = null!;
         public string? Phone { get; set; }
-
+public string? Gender { get; set; } 
         public string? Country { get; set; }
 
         public string PasswordHash { get; set; } = null!;
+        public string? GoogleSubject { get; set; }
         public Guid? SchoolId { get; set; }
         public Guid RoleId { get; set; }
         public bool IsActive { get; set; }

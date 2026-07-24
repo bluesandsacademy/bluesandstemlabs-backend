@@ -1,4 +1,4 @@
-// BlueSandsLMS.Infrastructure/Setup/DbSeeder.cs
+
 using System;
 using System.Linq;
 using System.Threading;
@@ -26,7 +26,7 @@ namespace BlueSandsLMS.Infrastructure.Setup
                 await SeedTeacherStarterPackAsync(db, ct);
         }
 
-        // ---- (1) Baseline: Subjects only (idempotent) ----
+
         public static async Task SeedSubjectsAsync(BlueSandsLMSDbContext db, CancellationToken ct = default)
         {
             var subjects = new[]
@@ -53,8 +53,7 @@ namespace BlueSandsLMS.Infrastructure.Setup
             await db.SaveChangesAsync(ct);
         }
 
-        // ---- (2) Dev Demo: minimal lessons so UI works now ----
-        // Safe-guard: only seeds if *no* lessons exist yet.
+
         public static async Task SeedDemoLessonsAsync(BlueSandsLMSDbContext db, CancellationToken ct = default)
         {
             var any = await db.Lessons.AnyAsync(ct);
@@ -85,9 +84,7 @@ namespace BlueSandsLMS.Infrastructure.Setup
             await db.SaveChangesAsync(ct);
         }
 
-        // ---- (3) Teacher Starter Pack (OFF by default) ----
-        // A richer seed you can switch on for staging/launch day so teachers aren’t starting from zero.
-        // Idempotent: only creates if subject has <= N lessons.
+
         public static async Task SeedTeacherStarterPackAsync(BlueSandsLMSDbContext db, CancellationToken ct = default)
         {
             await EnsureLessonAsync(db, "PHY", 1, "Kinematics Basics", "Displacement, velocity, acceleration", 20, ct);

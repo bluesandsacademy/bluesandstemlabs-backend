@@ -5,10 +5,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace BlueSandsLMS.Infrastructure.Migrations
 {
-    /// <inheritdoc />
+
     public partial class MakeSchoolIdNullableOnUser : Migration
     {
-        /// <inheritdoc />
+
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropForeignKey(
@@ -31,7 +31,7 @@ namespace BlueSandsLMS.Infrastructure.Migrations
                 principalColumn: "Id");
         }
 
-        /// <inheritdoc />
+
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropForeignKey(

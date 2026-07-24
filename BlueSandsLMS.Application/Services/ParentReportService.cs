@@ -27,14 +27,14 @@ namespace BlueSandsLMS.Application.Services
             var end = start.AddMonths(1).AddTicks(-1);
             var monthName = CultureInfo.InvariantCulture.DateTimeFormat.GetMonthName(month);
 
-            // Students in school
+
             var students = await _db.Users
                 .Include(u => u.Role)
                 .Where(u => u.SchoolId == schoolId && u.Role != null && u.Role.Name == "Student")
                 .Select(u => new { u.Id, u.FullName, u.Email })
                 .ToListAsync(ct);
 
-            // Pre-load ParentLinks for these students
+
             var studentIds = students.Select(s => s.Id).ToList();
             var parentLinks = await _db.ParentLinks
                 .Where(p => studentIds.Contains(p.StudentId))
@@ -48,7 +48,7 @@ namespace BlueSandsLMS.Application.Services
                 if (!parentLinks.TryGetValue(s.Id, out var links) || links.Count == 0)
                     continue;
 
-                // metrics for month
+
                 var experimentsCompleted = await _db.ExperimentLaunches
                     .Where(x => x.UserId == s.Id && x.Completed && x.StartedAt >= start && x.StartedAt <= end)
                     .CountAsync(ct);
@@ -63,7 +63,7 @@ namespace BlueSandsLMS.Application.Services
 
                 var badges = await _db.BadgeAwards.Where(b => b.UserId == s.Id && b.AwardedAt >= start && b.AwardedAt <= end).CountAsync(ct);
 
-                // Email body (simple, branded)
+
                 var html = BuildMonthlyHtml(s.FullName ?? "Student", monthName, year, experimentsCompleted, timeMins, Math.Round(avgQuiz * 100m, 2), badges);
 
                 foreach (var link in links)

@@ -23,11 +23,11 @@ namespace BlueSandsLMS.Infrastructure.Repositories
                 Id = Guid.NewGuid(),
                 ClassroomId = classroomId,
                 Title = title,
-                Type = (CoreAssignmentType)type,   // <-- explicitly cast to Core enum
+                Type = (CoreAssignmentType)type,
                 ResourceCode = resourceCode,
                 DueAt = dueAt,
                 CreatedAt = DateTime.UtcNow,
-                // Remove this next line if your entity doesn't have CreatedByUserId
+
                 CreatedByUserId = creatorUserId
             };
             _db.Assignments.Add(a);
@@ -39,7 +39,7 @@ namespace BlueSandsLMS.Infrastructure.Repositories
         {
             var a = await _db.Assignments.FindAsync(assignmentId) ?? throw new Exception("Assignment not found");
             a.Title = title;
-            a.Type = (CoreAssignmentType)type;   // <-- explicitly cast to Core enum
+            a.Type = (CoreAssignmentType)type;
             a.ResourceCode = resourceCode;
             a.DueAt = dueAt;
             await _db.SaveChangesAsync();

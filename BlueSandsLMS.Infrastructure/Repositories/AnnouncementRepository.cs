@@ -22,7 +22,7 @@ namespace BlueSandsLMS.Infrastructure.Repositories
                 Title = title,
                 Body = body,
                 CreatedAt = DateTime.UtcNow,
-                // If your entity has CreatedByUserId use it; remove if not present.
+
                 CreatedByUserId = authorUserId
             };
             _db.Announcements.Add(a);

@@ -17,30 +17,80 @@ namespace BlueSandsLMS.Application.Services.Student
         }
 
         public async Task<StartExperimentResponse> StartExperimentAsync(Guid userId, StartExperimentRequest req, CancellationToken ct)
+{
+
+    PhETSimulation? phetSim = null;
+    if (req.PhETSimulationId.HasValue)
+    {
+        phetSim = await _db.PhETSimulations.FindAsync(new object[] { req.PhETSimulationId.Value }, ct);
+        if (phetSim == null)
+            throw new InvalidOperationException("PhET simulation not found");
+    }
+
+
+    var requiresSubscription = phetSim != null && !phetSim.IsFree;
+    if (requiresSubscription)
+    {
+        var now      = DateTime.UtcNow;
+        var schoolId = await _db.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => u.SchoolId)
+            .FirstOrDefaultAsync(ct);
+
+        bool hasAccess = false;
+
+        if (schoolId.HasValue && schoolId.Value != Guid.Empty)
         {
-            var existing = await _db.ExperimentLaunches
-                .Where(x => x.UserId == userId && x.ExperimentName == req.ExperimentName && x.EndedAt == null)
-                .OrderByDescending(x => x.StartedAt).FirstOrDefaultAsync(ct);
 
-            if (existing is not null) return new(existing.Id);
-
-            var launch = new ExperimentLaunch
-            {
-                Id = Guid.NewGuid(),
-                UserId = userId,
-                ClassroomId = req.ClassroomId ?? Guid.Empty,
-                Subject = req.Subject,
-                ExperimentName = req.ExperimentName,
-                Mode = string.IsNullOrWhiteSpace(req.Mode) ? "guided" : req.Mode,
-                LastStep = 1,
-                StartedAt = DateTime.UtcNow
-            };
-            _db.ExperimentLaunches.Add(launch);
-            await _db.SaveChangesAsync(ct);
-
-            await _badges.AwardAsync(userId, "FIRST_LAUNCH", new { req.ExperimentName }, ct);
-            return new StartExperimentResponse(launch.Id);
+            hasAccess = await _db.Subscriptions
+                .AsNoTracking()
+                .AnyAsync(s => s.SchoolId == schoolId.Value && s.Active && s.StartsAt <= now && s.EndsAt >= now, ct);
         }
+
+        if (!hasAccess)
+        {
+
+            hasAccess = await _db.Subscriptions
+                .AsNoTracking()
+                .AnyAsync(s => s.UserId == userId && s.Active && s.StartsAt <= now && s.EndsAt >= now, ct);
+        }
+
+        if (!hasAccess)
+            throw new UnauthorizedAccessException(
+                "This simulation requires an active subscription or free trial. " +
+                "Your trial may have expired — please contact your school administrator.");
+    }
+    
+
+    var existing = await _db.ExperimentLaunches
+        .Where(x => x.UserId == userId && 
+                    x.PhETSimulationId == req.PhETSimulationId && 
+                    x.EndedAt == null)
+        .OrderByDescending(x => x.StartedAt)
+        .FirstOrDefaultAsync(ct);
+
+    if (existing is not null) 
+        return new(existing.Id);
+
+    var launch = new ExperimentLaunch
+    {
+        Id = Guid.NewGuid(),
+        UserId = userId,
+        ClassroomId = req.ClassroomId ?? Guid.Empty,
+        PhETSimulationId = req.PhETSimulationId,
+        Subject = phetSim?.Topic ?? req.Subject ?? "",
+        ExperimentName = phetSim?.Title ?? req.ExperimentName ?? "",
+        Mode = string.IsNullOrWhiteSpace(req.Mode) ? "guided" : req.Mode,
+        LastStep = 1,
+        StartedAt = DateTime.UtcNow
+    };
+    
+    _db.ExperimentLaunches.Add(launch);
+    await _db.SaveChangesAsync(ct);
+
+    await _badges.AwardAsync(userId, "FIRST_LAUNCH", new { launch.ExperimentName }, ct);
+    return new StartExperimentResponse(launch.Id);
+}
 
         public async Task SaveExperimentProgressAsync(Guid userId, Guid launchId, SaveExperimentProgressRequest req, CancellationToken ct)
         {

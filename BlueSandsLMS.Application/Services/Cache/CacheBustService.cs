@@ -1,5 +1,6 @@
+
 using System;
-using BlueSandsLMS.Common.Interfaces; // your ICacheBustService lives here
+using BlueSandsLMS.Common.Interfaces;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace BlueSandsLMS.Application.Services.Cache
@@ -11,7 +12,6 @@ namespace BlueSandsLMS.Application.Services.Cache
 
         public void InvalidateSchoolAdmin(Guid schoolId)
         {
-            // keep all school-admin dashboard related keys here
             _cache.Remove($"sa:overview:{schoolId}");
             _cache.Remove($"sa:trends:{schoolId}");
             _cache.Remove($"sa:perf:{schoolId}");
@@ -22,7 +22,16 @@ namespace BlueSandsLMS.Application.Services.Cache
             _cache.Remove($"sa:billing:{schoolId}");
         }
 
-        // ✅ This was missing
+        public void InvalidateGlobal()
+        {
+
+            _cache.Remove("pricing:tiers");
+            _cache.Remove("global:leaderboard:students");
+            _cache.Remove("global:leaderboard:teachers");
+            _cache.Remove("global:leaderboard:schools");
+        }
+
+
         public void InvalidateUser(Guid userId)
         {
             _cache.Remove($"user:{userId}:overview");

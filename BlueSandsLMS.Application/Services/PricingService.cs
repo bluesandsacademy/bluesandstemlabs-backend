@@ -6,7 +6,7 @@ namespace BlueSandsLMS.Application.Services
 {
     public interface IPricingService
     {
-        // ✅ accept promoCode
+
         Task<(decimal perStudent, PricingTier? tier)> ResolvePerStudentAsync(int studentCount, DateTime asOf, string? promoCode = null);
         (decimal subtotal, decimal vat, decimal total) ComputeTotals(int students, decimal perStudent, DateTime asOf);
         bool IsVatExempt(DateTime asOf);
@@ -19,17 +19,34 @@ namespace BlueSandsLMS.Application.Services
 
         public async Task<(decimal perStudent, PricingTier? tier)> ResolvePerStudentAsync(int studentCount, DateTime asOf, string? promoCode = null)
         {
-            // ✅ Only those who enter the code get ₦2,000
-            if (!string.IsNullOrWhiteSpace(promoCode) &&
-                string.Equals(promoCode.Trim(), "ABJEDTECH2025", StringComparison.OrdinalIgnoreCase))
+
+            if (!string.IsNullOrWhiteSpace(promoCode))
             {
-                return (2000m, null);
+                var code = await _db.PromoCodes
+                    .FirstOrDefaultAsync(p => p.Code == promoCode.Trim());
+
+                if (code == null)
+                    throw new InvalidOperationException($"Promo code '{promoCode}' is not valid.");
+                if (!code.IsActive)
+                    throw new InvalidOperationException($"Promo code '{promoCode}' is no longer active.");
+                if (code.ExpiresAt.HasValue && code.ExpiresAt.Value < asOf)
+                    throw new InvalidOperationException($"Promo code '{promoCode}' has expired.");
+                if (code.MaxRedemptions.HasValue && code.RedemptionCount >= code.MaxRedemptions.Value)
+                    throw new InvalidOperationException($"Promo code '{promoCode}' has reached its redemption limit.");
+
+
+                var pricingPromo = await _db.PricingPromos
+                    .Where(pp => pp.UsePromoPricing &&
+                                 (pp.StartsAt == null || pp.StartsAt <= asOf) &&
+                                 (pp.EndsAt == null || pp.EndsAt >= asOf))
+                    .OrderByDescending(pp => pp.DateCreated)
+                    .FirstOrDefaultAsync();
+
+                var promoPrice = pricingPromo?.PromoPricePerStudent ?? 2000m;
+                return (promoPrice, null);
             }
 
-            // 🚫 Ignore global promo so only code unlocks 2000 (as requested).
-            // If you ever need global promo again, re-enable it here.
 
-            // Fallback: pricing tiers (must be non-overlapping)
             var tier = await _db.PricingTiers
                 .Where(t => studentCount >= t.MinStudents && studentCount <= t.MaxStudents)
                 .OrderBy(t => t.MinStudents)

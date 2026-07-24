@@ -3,15 +3,15 @@ using System.Collections.Generic;
 
 namespace BlueSandsLMS.Common.Teacher
 {
-    // ---------- Overview ----------
+
     public sealed class TeacherOverviewDto
     {
         public int ActiveStudentsToday { get; set; }
         public int ActiveStudents7d { get; set; }
         public int ActiveStudents30d { get; set; }
         public int TimeSpentSec7d { get; set; }
-        public double LessonCompletionRate { get; set; } // 0..1
-        public double AvgScorePercent { get; set; }      // 0..100
+        public double LessonCompletionRate { get; set; }
+        public double AvgScorePercent { get; set; }
         public LabeledCount[] MostAttemptedLabs { get; set; } = Array.Empty<LabeledCount>();
         public GenderSplit ClassGenderSplit { get; set; } = new();
     }
@@ -35,16 +35,16 @@ namespace BlueSandsLMS.Common.Teacher
         public double Share { get; set; }
     }
 
-    // ---------- Engagement ----------
+
     public sealed class TeacherEngagementDto
     {
         public StudentEngagement[] ByStudent { get; set; } = Array.Empty<StudentEngagement>();
         public HourBucket[] PeakUsage { get; set; } = Array.Empty<HourBucket>();
 
-        // Optional maps for UI display (names/avatars/etc.)
+
         public Dictionary<Guid, string>? DisplayNames { get; set; }
 
-        // Placeholders for future telemetry (not populated yet)
+
         public LabeledShare[] DeviceMix { get; set; } = Array.Empty<LabeledShare>();
         public LabeledShare[] BrowserMix { get; set; } = Array.Empty<LabeledShare>();
     }
@@ -53,17 +53,17 @@ namespace BlueSandsLMS.Common.Teacher
     {
         public Guid StudentId { get; set; }
         public int TimeSpentSec { get; set; }
-        public int Interactions { get; set; }           // launches + quiz attempts (approx)
-        public double LessonCompletionRate { get; set; } // 0..1
+        public int Interactions { get; set; }
+        public double LessonCompletionRate { get; set; }
     }
 
     public sealed class HourBucket
     {
-        public int Hour { get; set; }   // 0..23
+        public int Hour { get; set; }
         public int Count { get; set; }
     }
 
-    // ---------- Performance ----------
+
     public sealed class TeacherPerformanceDto
     {
         public double AvgScorePercent { get; set; }
@@ -71,7 +71,7 @@ namespace BlueSandsLMS.Common.Teacher
         public StudentScore[] TopPerformers { get; set; } = Array.Empty<StudentScore>();
         public AtRiskStudent[] AtRisk { get; set; } = Array.Empty<AtRiskStudent>();
 
-        // Optional map for UI display
+
         public Dictionary<Guid, string>? DisplayNames { get; set; }
     }
 
@@ -91,10 +91,10 @@ namespace BlueSandsLMS.Common.Teacher
     public sealed class AtRiskStudent
     {
         public Guid StudentId { get; set; }
-        public string[] Reason { get; set; } = Array.Empty<string>(); // "Inactivity7d", "LowScore"
+        public string[] Reason { get; set; } = Array.Empty<string>();
     }
 
-    // ---------- Assignments ----------
+
     public sealed class TeacherAssignmentsDto
     {
         public int Created { get; set; }
@@ -114,11 +114,11 @@ namespace BlueSandsLMS.Common.Teacher
         public double AvgScorePercent { get; set; }
     }
 
-    // ---------- Attendance ----------
+
     public sealed class TeacherAttendanceDto
     {
-        public int OnlineNow { get; set; }    // approx
-        public int ActiveToday { get; set; }  // approx
+        public int OnlineNow { get; set; }
+        public int ActiveToday { get; set; }
         public DayActive[] ByDay { get; set; } = Array.Empty<DayActive>();
     }
 

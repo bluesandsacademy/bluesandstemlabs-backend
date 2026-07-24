@@ -17,46 +17,45 @@ namespace BlueSandsLMS.Infrastructure.Email
             _logger = logger;
         }
 
-        public async Task SendAsync(string to, string subject, string htmlBody, string? from = null)
+        public async Task SendAsync(string to, string subject, string htmlBody, string? fromEmail = null, string? fromName = null)
         {
             var es = _config.GetSection("EmailSettings");
 
-            var host     = es["SmtpServer"] ?? _config["Smtp:Host"] ?? "smtp.gmail.com";
-            var portStr  = es["SmtpPort"]   ?? _config["Smtp:Port"] ?? "587";
-            var user     = es["FromEmail"]  ?? _config["Smtp:User"];
-            var passRaw  = es["FromPassword"] ?? _config["Smtp:Pass"];
-            var sslStr   = es["EnableSsl"]  ?? _config["Smtp:EnableSsl"] ?? "true";
+            var host     = es["SmtpServer"]  ?? "smtp.gmail.com";
+            var portStr  = es["SmtpPort"]    ?? "587";
+            var sslStr   = es["EnableSsl"]   ?? "true";
+            var authUser = es["FromEmail"];
+            var passRaw  = es["FromPassword"];
 
             int.TryParse(portStr, out var port);
             bool.TryParse(sslStr, out var enableSsl);
+            var pass = string.IsNullOrWhiteSpace(passRaw) ? passRaw : passRaw!.Replace(" ", "");
 
-            var pass = string.IsNullOrWhiteSpace(passRaw) ? passRaw : passRaw.Replace(" ", "");
-
-            var fromEmail = from ?? es["FromEmail"] ?? _config["Smtp:FromEmail"] ?? "noreply@bluesandstemlabs.com";
-            var fromName  = es["FromDisplayName"] ?? _config["Smtp:FromName"] ?? "Blue Sands STEM Labs";
+            var resolvedFromEmail = fromEmail ?? authUser ?? "noreply@bluesandstemlabs.com";
+            var resolvedFromName  = fromName  ?? es["FromDisplayName"] ?? "Blue Sands STEM Labs";
 
             using var client = new SmtpClient(host, port)
             {
-                EnableSsl = enableSsl,
+                EnableSsl             = enableSsl,
                 UseDefaultCredentials = false,
-                Credentials = string.IsNullOrWhiteSpace(user)
+                Credentials           = string.IsNullOrWhiteSpace(authUser)
                     ? CredentialCache.DefaultNetworkCredentials
-                    : new NetworkCredential(user, pass),
+                    : new NetworkCredential(authUser, pass),
                 DeliveryMethod = SmtpDeliveryMethod.Network
             };
 
             using var mail = new MailMessage
             {
-                From = new MailAddress(fromEmail, fromName),
-                Subject = subject,
-                Body = htmlBody,
+                From      = new MailAddress(resolvedFromEmail, resolvedFromName),
+                Subject   = subject,
+                Body      = htmlBody,
                 IsBodyHtml = true
             };
             mail.To.Add(new MailAddress(to));
 
             try
             {
-                _logger.LogInformation("Attempting to send email to {To} via {Host}:{Port} as {User}", to, host, port, user);
+                _logger.LogInformation("Attempting to send email to {To} via {Host}:{Port} as {User}", to, host, port, authUser);
                 await client.SendMailAsync(mail);
                 _logger.LogInformation("✅ Email sent successfully to {To}", to);
             }

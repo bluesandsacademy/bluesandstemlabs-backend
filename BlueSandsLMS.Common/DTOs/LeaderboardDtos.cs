@@ -8,7 +8,7 @@ namespace BlueSandsLMS.Common.DTOs
         string Scope,
         Guid? ClassId,
         Guid? SchoolId,
-        string Metric,          // "quiz" | "experiments" | "badges" | "time"
+        string Metric,
         DateTime GeneratedAtUtc,
         List<LeaderboardEntryDto> Entries
     );

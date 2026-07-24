@@ -23,7 +23,7 @@ namespace BlueSandsLMS.Api.Controllers
         }
         private string Role() => User.FindFirstValue(ClaimTypes.Role) ?? "";
 
-        // STUDENT: first submit / upsert submit
+
         [HttpPost]
         [Authorize(Roles = "Student")]
         public async Task<IActionResult> Submit([FromBody] SubmitWorkDto dto)
@@ -39,7 +39,7 @@ namespace BlueSandsLMS.Api.Controllers
             }
         }
 
-        // STUDENT: resubmit by id
+
         
         [HttpPut("{submissionId:guid}/resubmit")]
         [Authorize(Roles = "Student")]
@@ -56,7 +56,7 @@ namespace BlueSandsLMS.Api.Controllers
             }
         }
 
-        // STUDENT: get my submission (for review)
+
         [HttpGet("mine")]
         [Authorize(Roles = "Student")]
         public async Task<IActionResult> Mine([FromQuery] Guid assignmentId)
@@ -65,7 +65,7 @@ namespace BlueSandsLMS.Api.Controllers
             return Ok(row);
         }
 
-        // TEACHER: grade
+
         [HttpPut("{submissionId:guid}/grade")]
         [Authorize(Roles = "Teacher")]
         public async Task<IActionResult> Grade(Guid submissionId, [FromBody] GradeSubmissionDto dto)
@@ -81,12 +81,12 @@ namespace BlueSandsLMS.Api.Controllers
             }
         }
 
-        // TEACHER: list submissions for an assignment (paging)
+
         [HttpGet("by-assignment/{assignmentId:guid}")]
         [Authorize(Roles = "Teacher")]
         public async Task<IActionResult> ByAssignment(Guid assignmentId, [FromQuery] int skip = 0, [FromQuery] int take = 50)
         {
-            // quick teacher check via helper
+
             var ok = await _repo.IsTeacherOfAssignmentAsync(assignmentId, UserId());
             if (!ok) return Forbid();
 

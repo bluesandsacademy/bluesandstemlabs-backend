@@ -16,7 +16,8 @@ namespace BlueSandsLMS.Api.Controllers
         public PaymentsController(IPaymentService payments) => _payments = payments;
 
         [HttpPost("initialize")]
-        [Authorize] // require login
+        [HttpPost("initiate")]
+        [Authorize]
         public async Task<IActionResult> Initialize([FromBody] InitPaymentRequest req)
             => Ok(await _payments.InitializeAsync(req, User));
 
@@ -44,14 +45,25 @@ namespace BlueSandsLMS.Api.Controllers
             if (uid is null) return Unauthorized();
             var guid = Guid.Parse(uid);
 
-            // If your Users.SchoolId is Guid (non-nullable), this will be Guid (not Guid?)
+
             var schoolId = await db.Users.AsNoTracking()
                 .Where(u => u.Id == guid)
-                .Select(u => u.SchoolId) // Guid (or Guid?)
+                .Select(u => u.SchoolId)
                 .FirstOrDefaultAsync();
 
-            // If EF typed it as Guid? for you, normalize:
-            var mySchoolId = schoolId; // keep as-is if Guid; if Guid? then use: (schoolId ?? Guid.Empty);
+
+            var mySchoolId = schoolId;
+
+
+            string currency = "NGN";
+            if (mySchoolId != null && mySchoolId != Guid.Empty)
+            {
+                currency = await db.Schools
+                    .Where(s => s.Id == mySchoolId)
+                    .Select(s => s.Currency)
+                    .FirstOrDefaultAsync() ?? "NGN";
+            }
+            var sym = currency == "UGX" ? "USh" : "₦";
 
             var list = await db.Payments.AsNoTracking()
                 .Where(p =>
@@ -66,11 +78,12 @@ namespace BlueSandsLMS.Api.Controllers
                     Source = p.RawResponse == "manual-registration" ? "Manual" : "Paystack",
                     Students = p.StudentsBilled,
                     PricePerStudent = p.PricePerStudent,
-                    Subtotal = $"₦{p.Subtotal:N2}",
-                    Vat = $"₦{p.Vat:N2}",
-                    Amount = $"₦{p.Total:N2}",
+                    Subtotal = $"{sym}{p.Subtotal:N2}",
+                    Vat = $"{sym}{p.Vat:N2}",
+                    Amount = $"{sym}{p.Total:N2}",
                     Status = p.Status.ToString(),
-                    p.PromoCode
+                    p.PromoCode,
+                    Currency = currency
                 })
                 .ToListAsync();
 
@@ -78,26 +91,25 @@ namespace BlueSandsLMS.Api.Controllers
         }
 
 
-        /// <summary>
-        /// Register a manual payment (cash/POS/bank) and activate user's subscription.
-        /// Roles: Admin, GlobalAdmin, SchoolAdmin (only for users in their school).
-        /// </summary>
+
        
         [HttpPost("register-payment")]
-        [Authorize]
-        public async Task<IActionResult> RegisterPayment([FromBody] RegisterPaymentRequest req)
-        {
-            try
-            {
-                var res = await _payments.RegisterManualAsync(req, User);
-                return Ok(res);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { error = ex.Message });
-            }
-        }
+[Authorize]
+public async Task<IActionResult> RegisterPayment([FromBody] RegisterPaymentRequest req, [FromServices] ILogger<PaymentsController> logger)
+{
+    try
+    {
+        var res = await _payments.RegisterManualAsync(req, User);
+        return Ok(res);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "RegisterPayment failed. Reference={Reference}, User={UserId}", req.Reference, req.UserId);
+        return BadRequest(new { error = ex.Message });
     }
 }
 
-  
+    }
+}
+
+

@@ -1,4 +1,4 @@
-// BlueSandsLMS.Common/Teacher/TeacherCommDtos.cs
+
 using System;
 using System.Collections.Generic;
 

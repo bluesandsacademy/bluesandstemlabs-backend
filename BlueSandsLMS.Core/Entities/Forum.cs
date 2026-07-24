@@ -1,4 +1,4 @@
-// BlueSandsLMS.Core/Entities/Forum.cs
+
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -8,7 +8,7 @@ namespace BlueSandsLMS.Core.Entities
     public class ForumTopic
     {
         [Key] public Guid Id { get; set; }
-        public Guid ClassroomId { get; set; }               // forum per class
+        public Guid ClassroomId { get; set; }
         [MaxLength(200)] public string Title { get; set; } = "";
         public Guid CreatedByUserId { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

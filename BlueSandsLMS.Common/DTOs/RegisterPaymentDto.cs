@@ -2,10 +2,7 @@ using System;
 
 namespace BlueSandsLMS.Common.DTOs
 {
-    /// <summary>
-    /// Manual payment registration for an individual user (non-Paystack).
-    /// All amounts are in Naira (NGN).
-    /// </summary>
+
     public sealed record RegisterPaymentRequest(
         string Reference,
         Guid UserId,
