@@ -1,41 +1,38 @@
-using BlueSandsLMS.Infrastructure;
-using Microsoft.EntityFrameworkCore;
-using BlueSandsLMS.Application.Services;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi.Models;
-using BlueSandsLMS.Infrastructure.Email;
-using BlueSandsLMS.Common.Interfaces;
-using BlueSandsLMS.Infrastructure.Repositories;
-using Microsoft.AspNetCore.Authorization;
 using BlueSandsLMS.Api.Auth;
-using System.Security.Claims;
-using BlueSandsLMS.Application.Services.Teacher;
-using BlueSandsLMS.Common.Interfaces.Dashboard;
-using BlueSandsLMS.Application.Services.Dashboard;
-using BlueSandsLMS.Application.Services.Student;
-using BlueSandsLMS.Common.Interfaces.Student;
-using BlueSandsLMS.Application.Services.Infrastructure;
-using BlueSandsLMS.Application.Services.Cache;
-using ISchoolAdminAnalytics = BlueSandsLMS.Common.Interfaces.Dashboard.ISchoolAdminService;
-using BlueSandsLMS.Common.Interfaces.Teacher;
-using BlueSandsLMS.Common.Interfaces.Admin;
-using BlueSandsLMS.Application.Services.Admin;
-using BlueSandsLMS.Api.Realtime;
-using BlueSandsLMS.Api.Services;
 using BlueSandsLMS.Api.Infrastructure;
 using BlueSandsLMS.Api.OpenApi;
+using BlueSandsLMS.Api.Realtime;
+using BlueSandsLMS.Api.Services;
+using BlueSandsLMS.Application.Services;
+using BlueSandsLMS.Application.Services.Admin;
+using BlueSandsLMS.Application.Services.Cache;
+using BlueSandsLMS.Application.Services.Dashboard;
+using BlueSandsLMS.Application.Services.Infrastructure;
+using BlueSandsLMS.Application.Services.Student;
+using BlueSandsLMS.Application.Services.Teacher;
+using BlueSandsLMS.Common.Interfaces;
+using BlueSandsLMS.Common.Interfaces.Admin;
+using BlueSandsLMS.Common.Interfaces.Student;
+using BlueSandsLMS.Common.Interfaces.Teacher;
 using BlueSandsLMS.Core.Entities;
+using BlueSandsLMS.Infrastructure;
+using BlueSandsLMS.Infrastructure.Email;
+using BlueSandsLMS.Infrastructure.Repositories;
 using BlueSandsLMS.Infrastructure.Setup;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Text;
+using ISchoolAdminAnalytics = BlueSandsLMS.Common.Interfaces.Dashboard.ISchoolAdminService;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
-
-
 var builder = WebApplication.CreateBuilder(args);
-
 
 builder.Services.AddDbContext<BlueSandsLMSDbContext>(options =>
 {
@@ -46,7 +43,6 @@ builder.Services.AddDbContext<BlueSandsLMSDbContext>(options =>
         sql.CommandTimeout(60);
     });
 });
-
 
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient();
@@ -61,7 +57,10 @@ builder.Services.AddSingleton<BlueSandsLMS.Common.Interfaces.IPraxiLabsService,
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ISchoolService, SchoolService>();
-builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+
+//builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+builder.Services.AddScoped<IEmailService, MailKitEmailService>();
+
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ILeaderboardService, LeaderboardService>();
 builder.Services.AddScoped<IExportService, ExportService>();
@@ -82,7 +81,6 @@ builder.Services.AddScoped<BlueSandsLMS.Common.Interfaces.ISchoolAdminService, S
 builder.Services.AddScoped<BlueSandsLMS.Common.Interfaces.Admin.IGlobalAdminService, BlueSandsLMS.Application.Services.Admin.GlobalAdminService>();
 builder.Services.AddScoped<BlueSandsLMS.Common.Interfaces.IExtendedLeaderboardService, BlueSandsLMS.Application.Services.LeaderboardService>();
 
-
 builder.Services.AddScoped<IStudentDashboardService, StudentDashboardService>();
 builder.Services.AddScoped<IStudentActionsService, StudentActionsService>();
 builder.Services.AddScoped<IBadgeEngine, BadgeEngine>();
@@ -102,14 +100,36 @@ builder.Services.AddScoped<ApiErrorEnvelopeFilter>();
 builder.Services.AddSingleton<RequestMetricsStore>();
 builder.Services.Configure<MonitoringOptions>(builder.Configuration.GetSection("Monitoring"));
 
-
 builder.Services.AddScoped<IAuthorizationHandler, PaidSubscriberHandler>();
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("PaidSubscriber", p => p.Requirements.Add(new PaidSubscriberRequirement()));
 });
 
+// Register HttpContextAccessor and CurrentUser wrapper
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<BlueSandsLMS.Api.Services.ICurrentUser, BlueSandsLMS.Api.Services.CurrentUser>();
 
+// Resolve JWT secret — support "REPLACE_WITH_ENV_VAR: <ENVNAME>" placeholder used in appsettings
+string ResolveJwtSecret(string configured)
+{
+    if (string.IsNullOrWhiteSpace(configured)) return configured ?? string.Empty;
+    var marker = "REPLACE_WITH_ENV_VAR:";
+    if (configured.StartsWith(marker, StringComparison.OrdinalIgnoreCase))
+    {
+        var envKey = configured.Substring(marker.Length).Trim();
+        var envVal = Environment.GetEnvironmentVariable(envKey);
+        if (string.IsNullOrWhiteSpace(envVal))
+            throw new InvalidOperationException($"JWT secret configuration requires environment variable '{envKey}' to be set.");
+        return envVal;
+    }
+    return configured;
+}
+
+var configuredSecret = builder.Configuration["Jwt:Secret"];
+var jwtSecret = ResolveJwtSecret(configuredSecret);
+
+// Authentication configuration
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -123,14 +143,18 @@ builder.Services
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidAudience = builder.Configuration["Jwt:Audience"],
             IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"]
-                    ?? throw new InvalidOperationException("Missing Jwt:Secret")))
+                Encoding.UTF8.GetBytes(jwtSecret ?? throw new InvalidOperationException("Missing Jwt:Secret"))),
+
+            // Ensure the token's name/role claims are mapped as expected:
+            NameClaimType = "sub",   // your tokens use "sub" for subject
+            RoleClaimType = "role"   // your tokens use "role" (lowercase)
         };
 
         options.Events = new JwtBearerEvents
         {
             OnTokenValidated = ctx =>
             {
+                // If you still want ClaimTypes.NameIdentifier present, set it here.
                 var id = ctx.Principal?.FindFirst("sub")?.Value;
                 if (!string.IsNullOrWhiteSpace(id))
                 {
@@ -138,6 +162,9 @@ builder.Services
                     if (!identity.HasClaim(c => c.Type == ClaimTypes.NameIdentifier))
                         identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, id));
                 }
+
+                // Map role claims to ClaimTypes.Role if needed (optional)
+                // If tokens have "role" claims they should already be available via RoleClaimType above.
                 return Task.CompletedTask;
             },
             OnChallenge = async ctx =>
@@ -164,6 +191,8 @@ builder.Services
         };
     });
 
+// Before registering authentication, add this line to avoid automatic claim type mapping:
+JwtSecurityTokenHandler.DefaultMapInboundClaims = false;
 
 const string CorsPolicy = "AllowFrontend";
 string[] allowedOrigins =
@@ -172,7 +201,6 @@ string[] allowedOrigins =
     "https://www.bluesandstemlabs.com",
     "http://localhost:3000", "http://127.0.0.1:3000",
     "http://localhost:5173", "http://127.0.0.1:5173"
-
 };
 
 builder.Services.AddCors(options =>
@@ -194,7 +222,6 @@ builder.Services.AddCors(options =>
     });
 });
 
-
 builder.Services.AddControllers().AddJsonOptions(o =>
 {
     o.JsonSerializerOptions.ReferenceHandler =
@@ -208,7 +235,6 @@ builder.Services.AddControllers().AddJsonOptions(o =>
 {
     options.Filters.Add<ApiErrorEnvelopeFilter>();
 });
-
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -226,23 +252,38 @@ builder.Services.AddSwaggerGen(c =>
         }
     });
 
-
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
         Type = SecuritySchemeType.Http,
-        Scheme = "Bearer",
+        Scheme = "bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "Enter: Bearer {token}"
+        Description = "JWT Authorization header using the Bearer scheme. Enter token only (no \"Bearer \" prefix) if Swagger UI shows the token field."
     });
 
+    // Ensure operations that use [Authorize] receive the security requirement
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+        {
+            Reference = new OpenApiReference
+            {
+                Type = ReferenceType.SecurityScheme,
+                Id = "Bearer"
+            },
+            Scheme = "bearer",
+            Name = "Bearer",
+            In = ParameterLocation.Header
+        },
+            Array.Empty<string>()
+        }
+    });
 
     c.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
 
-
     c.SupportNonNullableReferenceTypes();
-
 
     c.MapType<DateOnly>(() => new OpenApiSchema { Type = "string", Format = "date" });
     c.MapType<TimeOnly>(() => new OpenApiSchema { Type = "string", Format = "time" });
@@ -262,11 +303,8 @@ builder.Services.AddSwaggerGen(c =>
     c.AddServer(new OpenApiServer { Url = "/", Description = "Current host" });
     c.AddServer(new OpenApiServer { Url = "http://localhost:5245", Description = "Local development" });
 
-
     c.CustomSchemaIds(t => t.FullName);
 });
-
-
 
 var app = builder.Build();
 
@@ -305,7 +343,6 @@ app.UseSwaggerUI(s =>
     s.EnablePersistAuthorization();
 });
 
-
 app.UseExceptionHandler(errorApp =>
 {
     errorApp.Run(async ctx =>
@@ -314,13 +351,12 @@ app.UseExceptionHandler(errorApp =>
         var feature = ctx.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerPathFeature>();
         var ex = feature?.Error;
 
-
         var status = ex switch
         {
             ArgumentException or InvalidOperationException => StatusCodes.Status400BadRequest,
-            UnauthorizedAccessException                    => StatusCodes.Status403Forbidden,
-            KeyNotFoundException                           => StatusCodes.Status404NotFound,
-            _                                              => StatusCodes.Status500InternalServerError
+            UnauthorizedAccessException => StatusCodes.Status403Forbidden,
+            KeyNotFoundException => StatusCodes.Status404NotFound,
+            _ => StatusCodes.Status500InternalServerError
         };
 
         ctx.Response.StatusCode = status;
@@ -350,8 +386,6 @@ app.UseStatusCodePages(async statusContext =>
     await ctx.Response.WriteAsJsonAsync(payload);
 });
 
-
-
 app.UseStaticFiles();
 if (!app.Environment.IsDevelopment())
 {
@@ -363,7 +397,6 @@ app.UseWebSockets(new WebSocketOptions
 {
     KeepAliveInterval = TimeSpan.FromSeconds(30)
 });
-
 
 app.Use(async (ctx, next) =>
 {
@@ -391,7 +424,6 @@ app.Use(async (ctx, next) =>
             return;
         }
 
-
         ctx.Response.OnStarting(() =>
         {
             ctx.Response.Headers["Access-Control-Allow-Origin"] = origin;
@@ -403,7 +435,6 @@ app.Use(async (ctx, next) =>
 
     await next();
 });
-
 
 app.UseCors(CorsPolicy);
 

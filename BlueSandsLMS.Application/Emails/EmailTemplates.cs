@@ -3,7 +3,8 @@ namespace BlueSandsLMS.Application.Emails
     public static class EmailTemplates
     {
         public static string BuildWelcomeEmailHtml(
-            string role, string firstName, string loginLink, string verifyLink,
+            string role, string firstName,
+                          string verifyLink,
             string supportEmail, string supportPhone, string appName = "Blue Sands STEM Labs")
         {
             string roleBlock = role switch
@@ -35,7 +36,6 @@ Boost confidence and exam readiness with real-world simulations.</p>"
 <hr/>
 <h3>🚀 Your Next Steps</h3>
 <ol>
-  <li>Log in to your account: <a href=""{loginLink}"">Login Link</a></li>
   <li>Explore your personalized dashboard.</li>
   <li>Start your first virtual experiment today!</li>
 </ol>
