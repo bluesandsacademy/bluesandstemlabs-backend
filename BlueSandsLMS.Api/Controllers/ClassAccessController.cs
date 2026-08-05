@@ -74,11 +74,14 @@ namespace BlueSandsLMS.Api.Controllers
     {
         private readonly IClassRepository _repo;
         private readonly ICurrentUser _currentUser;
+        private readonly ILogger<ClassAccessController> _logger;
 
-        public ClassAccessController(IClassRepository repo, ICurrentUser currentUser)
+        public ClassAccessController(IClassRepository repo, ICurrentUser currentUser,
+            ILogger<ClassAccessController> logger)
         {
             _repo = repo;
             _currentUser = currentUser;
+            _logger = logger;
         }
 
         private Guid UserId()
@@ -95,6 +98,7 @@ namespace BlueSandsLMS.Api.Controllers
             return Ok(list.ToArray());
         }
 
+      
         [HttpPost("{classId:guid}/rotate-invite")]
         [Authorize(Roles = "Teacher,SchoolAdmin")]
         public async Task<IActionResult> RotateInvite(Guid classId, [FromBody] RotateInviteCodeDto body)

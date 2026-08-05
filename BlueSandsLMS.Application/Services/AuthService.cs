@@ -108,7 +108,7 @@ namespace BlueSandsLMS.Application.Services
             var claims = new List<Claim>
             {
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-                new Claim(ClaimTypes.Role, roleName),
+                new Claim("role", roleName),        // Use literal "role"
                 new Claim("token_type", "refresh")
             };
 
@@ -855,7 +855,7 @@ public async Task ChangePasswordAsync(Guid userId, string currentPassword, strin
         }
 
 
-        private async Task<AuthResponseDto> GenerateAuthResponse(User user, TimeSpan? tokenTtl = null)
+private async Task<AuthResponseDto> GenerateAuthResponse(User user, TimeSpan? tokenTtl = null)
 {
     var secret = GetJwtSecret();
     var issuer = _config["Jwt:Issuer"] ?? string.Empty;
@@ -872,7 +872,7 @@ public async Task ChangePasswordAsync(Guid userId, string currentPassword, strin
     {
         new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
         new Claim("FullName", user.FullName ?? string.Empty),
-        new Claim(ClaimTypes.Role, roleName)
+        new Claim("role", roleName)
     };
 
     if (user.SchoolId.HasValue && user.SchoolId.Value != Guid.Empty)

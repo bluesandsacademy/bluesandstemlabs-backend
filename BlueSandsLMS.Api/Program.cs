@@ -1,4 +1,4 @@
-using BlueSandsLMS.Api.Auth;
+﻿using BlueSandsLMS.Api.Auth;
 using BlueSandsLMS.Api.Infrastructure;
 using BlueSandsLMS.Api.OpenApi;
 using BlueSandsLMS.Api.Realtime;
@@ -25,12 +25,16 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using OfficeOpenXml;
+using System.ComponentModel;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using ISchoolAdminAnalytics = BlueSandsLMS.Common.Interfaces.Dashboard.ISchoolAdminService;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
+ExcelPackage.License.SetNonCommercialOrganization("Blue Sands STEM Labs");
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -57,6 +61,7 @@ builder.Services.AddSingleton<BlueSandsLMS.Common.Interfaces.IPraxiLabsService,
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ISchoolService, SchoolService>();
+builder.Services.AddScoped<IExcelUploadService, ExcelUploadService>();
 
 //builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 builder.Services.AddScoped<IEmailService, MailKitEmailService>();
@@ -110,7 +115,7 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<BlueSandsLMS.Api.Services.ICurrentUser, BlueSandsLMS.Api.Services.CurrentUser>();
 
-// Resolve JWT secret � support "REPLACE_WITH_ENV_VAR: <ENVNAME>" placeholder used in appsettings
+// Resolve JWT secret — support "REPLACE_WITH_ENV_VAR: <ENVNAME>" placeholder used in appsettings
 string ResolveJwtSecret(string configured)
 {
     if (string.IsNullOrWhiteSpace(configured)) return configured ?? string.Empty;
@@ -134,6 +139,10 @@ builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        // CRITICAL: In .NET 9, JwtBearerHandler uses JsonWebTokenHandler internally.
+        // This prevents it from remapping "sub" -> ClaimTypes.NameIdentifier, "role" -> ClaimTypes.Role, etc.
+        options.MapInboundClaims = false;
+
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -145,16 +154,14 @@ builder.Services
             IssuerSigningKey = new SymmetricSecurityKey(
                 Encoding.UTF8.GetBytes(jwtSecret ?? throw new InvalidOperationException("Missing Jwt:Secret"))),
 
-            // Ensure the token's name/role claims are mapped as expected:
-            NameClaimType = "sub",   // your tokens use "sub" for subject
-            RoleClaimType = "role"   // your tokens use "role" (lowercase)
+            NameClaimType = "sub",
+            RoleClaimType = "role"
         };
 
         options.Events = new JwtBearerEvents
         {
             OnTokenValidated = ctx =>
             {
-                // If you still want ClaimTypes.NameIdentifier present, set it here.
                 var id = ctx.Principal?.FindFirst("sub")?.Value;
                 if (!string.IsNullOrWhiteSpace(id))
                 {
@@ -163,8 +170,6 @@ builder.Services
                         identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, id));
                 }
 
-                // Map role claims to ClaimTypes.Role if needed (optional)
-                // If tokens have "role" claims they should already be available via RoleClaimType above.
                 return Task.CompletedTask;
             },
             OnChallenge = async ctx =>
@@ -190,9 +195,6 @@ builder.Services
             }
         };
     });
-
-// Before registering authentication, add this line to avoid automatic claim type mapping:
-JwtSecurityTokenHandler.DefaultMapInboundClaims = false;
 
 const string CorsPolicy = "AllowFrontend";
 string[] allowedOrigins =
