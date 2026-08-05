@@ -16,7 +16,7 @@ namespace BlueSandsLMS.Api.Controllers
 
 
         [HttpGet("students")]
-        public async Task<ActionResult<GlobalLeaderboardResponse<StudentRankDto>>> Students(
+        public async Task<ActionResult<StudentRankDto>> Students(
             [FromQuery] string metric = "quiz", [FromQuery] string period = "all", [FromQuery] int top = 50)
             => Ok(await _svc.GetGlobalStudentsAsync(metric, period, top));
 

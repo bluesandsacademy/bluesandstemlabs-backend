@@ -26,101 +26,107 @@ namespace BlueSandsLMS.Application.Services.Admin
 
 
         public async Task<GlobalAdminTotalsDto> GetTotalsAsync(CancellationToken ct = default)
-{
-    const string cacheKey = "ga:totals:v5";
-    if (_cache.TryGetValue(cacheKey, out var boxed) && boxed is GlobalAdminTotalsDto cached)
-        return cached;
+        {
+            const string cacheKey = "ga:totals:v5";
+            if (_cache.TryGetValue(cacheKey, out var boxed) && boxed is GlobalAdminTotalsDto cached)
+                return cached;
 
-    var nowUtc  = DateTime.UtcNow;
-    var since30 = nowUtc.AddDays(-30);
-
-
+            var nowUtc = DateTime.UtcNow;
+            var since30 = nowUtc.AddDays(-30);
 
 
-    var totalUsers         = await _db.Users.CountAsync(ct);
-    var activeUsers30d     = await _db.Users.CountAsync(u => u.LastLogin != null && u.LastLogin >= since30, ct);
-    var totalSchools       = await _db.Schools.CountAsync(ct);
-    var experimentAttempts = await _db.ExperimentLaunches.LongCountAsync(ct);
-    var quizAttempts       = await _db.QuizAttempts.LongCountAsync(ct);
-    var totalLabTimeSec    = await _db.ExperimentLaunches.SumAsync(e => (long)e.DurationSec, ct);
-    var revenue            = await _db.Payments.Where(p => p.Status == PaymentStatus.Paid)
-                                               .SumAsync(p => (decimal?)p.Total, ct);
-    var activeSubs         = await _db.Subscriptions.CountAsync(s => s.Active, ct);
+
+            var totalUsers = await _db.Users.CountAsync(ct);
+            var activeUsers30d = await _db.Users.CountAsync(u => u.LastLogin != null && u.LastLogin >= since30, ct);
+            var totalSchools = await _db.Schools.CountAsync(ct);
+            var experimentAttempts = await _db.ExperimentLaunches.LongCountAsync(ct);
+            var quizAttempts = await _db.QuizAttempts.LongCountAsync(ct);
+            var totalLabTimeSec = await _db.ExperimentLaunches.SumAsync(e => (long)e.DurationSec, ct);
+            var revenue = await _db.Payments.Where(p => p.Status == PaymentStatus.Paid)
+                                                       .SumAsync(p => (decimal?)p.Total, ct);
+            var activeSubs = await _db.Subscriptions.CountAsync(s => s.Active, ct);
 
 
-    var maleUsers   = await _db.Users.CountAsync(u => u.Gender != null && u.Gender.ToLower() == "male", ct);
-    var femaleUsers = await _db.Users.CountAsync(u => u.Gender != null && u.Gender.ToLower() == "female", ct);
+            var maleUsers = await _db.Users.CountAsync(u => u.Gender != null && u.Gender.ToLower() == "male", ct);
+            var femaleUsers = await _db.Users.CountAsync(u => u.Gender != null && u.Gender.ToLower() == "female", ct);
 
 
-    var offlineUsers = await _db.ExperimentLaunches
-        .Where(e => e.Mode != null && e.Mode.ToLower() == "offline"
-                    && e.DateCreated >= since30 && e.UserId != Guid.Empty)
-        .Select(e => e.UserId)
-        .Distinct()
-        .CountAsync(ct);
+            var offlineUsers = await _db.ExperimentLaunches
+                .Where(e => e.Mode != null && e.Mode.ToLower() == "offline"
+                            && e.DateCreated >= since30 && e.UserId != Guid.Empty)
+                .Select(e => e.UserId)
+                .Distinct()
+                .CountAsync(ct);
 
 
-    var totalPayments     = await _db.Payments.CountAsync(p => p.Status == PaymentStatus.Paid, ct);
-    var totalStemCourses  = await _db.PhETSimulations.CountAsync(ct);
-    var totalQuizScores   = await _db.QuizAttempts.SumAsync(q => (double)q.Score0to1, ct);
-    var totalIls          = await _db.InteractiveLearningSpaces.CountAsync(ct);
+            var totalPayments = await _db.Payments.CountAsync(p => p.Status == PaymentStatus.Paid, ct);
+            var totalStemCourses = await _db.PhETSimulations.CountAsync(ct);
+            var totalQuizScores = await _db.QuizAttempts.SumAsync(q => (double)q.Score0to1, ct);
+            var totalIls = await _db.InteractiveLearningSpaces.CountAsync(ct);
 
 
-    var activeSubSchoolIds = await _db.Subscriptions
-        .Where(s => s.Active && s.SchoolId != Guid.Empty)
-        .Select(s => s.SchoolId)
-        .Distinct()
-        .ToListAsync(ct);
+            var activeSubSchoolIds = await _db.Subscriptions
+                .Where(s => s.Active && s.SchoolId != Guid.Empty)
+                .Select(s => s.SchoolId)
+                .Distinct()
+                .ToListAsync(ct);
 
 
-    var activeSubUserIds = await _db.Subscriptions
-        .Where(s => s.Active && s.UserId != null && s.UserId != Guid.Empty)
-        .Select(s => s.UserId!.Value)
-        .Distinct()
-        .ToListAsync(ct);
+            var activeSubUserIds = await _db.Subscriptions
+                .Where(s => s.Active && s.UserId != null && s.UserId != Guid.Empty)
+                .Select(s => s.UserId!.Value)
+                .Distinct()
+                .ToListAsync(ct);
 
 
-    List<Guid> usersInSubbedSchoolsIds = activeSubSchoolIds.Count == 0
-        ? new List<Guid>()
-        : await _db.Users.AsNoTracking()
-            .Where(u => u.SchoolId.HasValue && activeSubSchoolIds.Contains(u.SchoolId.Value))
-            .Select(u => u.Id)
-            .ToListAsync(ct);
+            List<Guid> usersInSubbedSchoolsIds = activeSubSchoolIds.Count == 0
+                ? new List<Guid>()
+                : await _db.Users.AsNoTracking()
+                    .Where(u => u.SchoolId.HasValue && activeSubSchoolIds.Contains(u.SchoolId.Value))
+                    .Select(u => u.Id)
+                    .ToListAsync(ct);
 
 
-    var subscribedUsers = new HashSet<Guid>(usersInSubbedSchoolsIds);
-    foreach (var uid in activeSubUserIds) subscribedUsers.Add(uid);
-    var totalSubscribedUsers = subscribedUsers.Count;
+            var subscribedUsers = new HashSet<Guid>(usersInSubbedSchoolsIds);
+            foreach (var uid in activeSubUserIds) subscribedUsers.Add(uid);
+            var totalSubscribedUsers = subscribedUsers.Count;
 
-    var dto = new GlobalAdminTotalsDto(
-        TotalUsers:              totalUsers,
-        ActiveUsers30d:          activeUsers30d,
-        TotalSchools:            totalSchools,
-        TotalExperimentAttempts: experimentAttempts,
-        TotalQuizAttempts:       quizAttempts,
-        TotalLabTimeMinutes:     totalLabTimeSec / 60L,
-        TotalRevenueNGN:         revenue ?? 0m,
-        ActiveSubscriptions:     activeSubs,
+            // Compute total teachers and total students directly using the Role navigation property
+            var totalTeachers = await _db.Users.CountAsync(u => u.Role != null && u.Role.Name == "Teacher", ct);
+            var totalStudent = await _db.Users.CountAsync(u => u.Role != null && u.Role.Name == "Student", ct);
+
+            var dto = new GlobalAdminTotalsDto(
+                TotalUsers: totalUsers,
+                ActiveUsers30d: activeUsers30d,
+                TotalSchools: totalSchools,
+                TotalExperimentAttempts: experimentAttempts,
+                TotalQuizAttempts: quizAttempts,
+                TotalLabTimeMinutes: totalLabTimeSec / 60L,
+                TotalRevenueNGN: revenue ?? 0m,
+                totalTeachers: totalTeachers,
+                totalStudent: totalStudent,
+                ActiveSubscriptions: activeSubs,
 
 
-        TotalPayments:           totalPayments,
-        TotalStemCourses:        totalStemCourses,
-        TotalQuizScores:         totalQuizScores,
-        TotalSubscribedUsers:    totalSubscribedUsers,
-        MaleUsers:               maleUsers,
-        FemaleUsers:             femaleUsers,
-        OfflineUsers:            offlineUsers,
-        TotalIls:                totalIls,
+                TotalPayments: totalPayments,
+                TotalStemCourses: totalStemCourses,
+                TotalQuizScores: totalQuizScores,
+                TotalSubscribedUsers: totalSubscribedUsers,
+                MaleUsers: maleUsers,
+                FemaleUsers: femaleUsers,
+                OfflineUsers: offlineUsers,
+                TotalIls: totalIls,
 
-        GeneratedAtUtc:          nowUtc
-    );
+                GeneratedAtUtc: nowUtc
+            );
 
-    _cache.Set(cacheKey, dto, new MemoryCacheEntryOptions {
-        AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(120)
-    });
+            _cache.Set(cacheKey, dto, new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(120)
+            });
 
-    return dto;
-}
+            return dto;
+        }
 
 
 

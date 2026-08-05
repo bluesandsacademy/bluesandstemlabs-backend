@@ -1,10 +1,7 @@
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
 using BlueSandsLMS.Common.DTOs.Admin;
 using BlueSandsLMS.Common.Interfaces.Admin;
-
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 namespace BlueSandsLMS.Api.Controllers
 {
     [ApiController]
