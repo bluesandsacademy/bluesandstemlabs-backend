@@ -22,10 +22,10 @@ namespace BlueSandsLMS.Application.Services
             };
         }
 
-        public async Task<List<StudentRankDto>> GetGlobalStudentsAsync(string metric = "quiz", string period = "all", int top = 50)
+        public async Task<GlobalLeaderboardResponse<StudentRankDto>> GetGlobalStudentsAsync(string metric = "quiz", string period = "all", int top = 50)
         {
             var key = $"lb:global:students:{metric}:{period}:{top}";
-            if (_cache.TryGetValue(key, out var boxed) && boxed is List<StudentRankDto> cached)
+            if (_cache.TryGetValue(key, out var boxed) && boxed is GlobalLeaderboardResponse<StudentRankDto> cached)
                 return cached;
 
             DateTime? lb = LowerBound(period);
