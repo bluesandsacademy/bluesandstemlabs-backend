@@ -5,8 +5,8 @@ namespace BlueSandsLMS.Common.Interfaces
 {
     public interface IExtendedLeaderboardService
     {
-        Task<GlobalLeaderboardResponse<StudentRankDto>> GetGlobalStudentsAsync(string metric = "quiz", string period = "all", int top = 50);
-        Task<GlobalLeaderboardResponse<TeacherRankDto>> GetGlobalTeachersAsync(string metric = "quiz", string period = "all", int top = 50);
-        Task<GlobalLeaderboardResponse<SchoolRankDto>> GetGlobalSchoolsAsync(string metric = "quiz", string period = "all", int top = 50);
+        Task<List<StudentRankDto>> GetGlobalStudentsAsync(string metric = "quiz", string period = "all", int top = 50);
+        Task<List<TeacherRankDto>> GetGlobalTeachersAsync(string metric = "quiz", string period = "all", int top = 50);
+        Task<List<SchoolRankDto>> GetGlobalSchoolsAsync(string metric = "quiz", string period = "all", int top = 50);
     }
 }
