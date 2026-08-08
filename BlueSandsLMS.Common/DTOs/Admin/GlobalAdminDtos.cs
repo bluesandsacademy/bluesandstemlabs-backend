@@ -13,6 +13,8 @@ namespace BlueSandsLMS.Common.DTOs.Admin
     long TotalQuizAttempts,
     long TotalLabTimeMinutes,
     decimal TotalRevenueNGN,
+    int totalTeachers,
+    int totalStudent,
     int ActiveSubscriptions,
 
 
@@ -119,11 +121,14 @@ namespace BlueSandsLMS.Common.DTOs.Admin
 
 
     
-    public record SchoolRankDto(Guid SchoolId, string SchoolName, double Score, int Rank);
+    public record SchoolRankDto(string Name, string Country, int NumberOfStudents,int Experiments,
+        int Points,double Average);
     
-    public record TeacherRankDto(Guid UserId, string Name, double Score, int Rank);
+    public record TeacherRankDto(string Name, string School, string Country, string Subject,string Students,string Rating,
+        int Points,double Average);
     
-    public record StudentRankDto(Guid UserId, string Name, double Score, int Rank);
+    //public record StudentRankDto(Guid UserId, string Name, double Score, int Rank);
+    public record StudentRankDto(string Name, string School, string Country, string Experiments,int Points,double Average);
 
     public record StudentRank(Guid UserId, string Name, string? SchoolName, double Score, int Rank);
     

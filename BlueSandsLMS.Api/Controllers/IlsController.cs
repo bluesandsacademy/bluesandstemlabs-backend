@@ -2,6 +2,7 @@ using System.Linq;
 using System.Globalization;
 using System.Security.Claims;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using BlueSandsLMS.Common.DTOs;
 using BlueSandsLMS.Core.Entities;
 using BlueSandsLMS.Infrastructure;
@@ -139,8 +140,8 @@ namespace BlueSandsLMS.Api.Controllers
             var details = new List<(string field, string issue)>();
             if (string.IsNullOrWhiteSpace(request.Title)) details.Add(("title", "Title is required"));
             if (string.IsNullOrWhiteSpace(request.Objective)) details.Add(("objective", "Objective is required"));
-            if (!TryParseDurationHours(request.Duration, out var durationMinutes))
-                details.Add(("duration", "Duration must be a positive number of hours"));
+            if (!TryParseDurationToMinutes(request.Duration, out var durationMinutes))
+                details.Add(("duration", "Duration must be a positive time (e.g. '2 hours' or '30 minutes')"));
             if (request.Tags == null || request.Tags.Count == 0) details.Add(("tags", "At least one tag is required"));
             if (request.PreSimAssessment?.Questions == null || request.PreSimAssessment.Questions.Count == 0)
                 details.Add(("preSimAssessment.questions", "At least one pre-simulation question is required"));
@@ -449,8 +450,8 @@ public async Task<IActionResult> Update(Guid id, [FromBody] UpdateIlsRequest req
 
         if (request.Duration != null)
         {
-            if (!TryParseDurationHours(request.Duration, out var durationMinutes))
-                return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR", "Validation failed", ("duration", "Duration must be a positive number of hours"));
+            if (!TryParseDurationToMinutes(request.Duration, out var durationMinutes))
+                return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR", "Validation failed", ("duration", "Duration must be a positive time (e.g. '2 hours' or '30 minutes')"));
             ils.DurationMinutes = durationMinutes;
         }
 
@@ -608,8 +609,8 @@ public async Task<IActionResult> Update(Guid id, [FromBody] UpdateIlsRequest req
         var durationMinutes = ils.DurationMinutes;
         if (request.Duration != null)
         {
-            if (!TryParseDurationHours(request.Duration, out durationMinutes))
-                return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR", "Validation failed", ("duration", "Duration must be a positive number of hours"));
+            if (!TryParseDurationToMinutes(request.Duration, out durationMinutes))
+                return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR", "Validation failed", ("duration", "Duration must be a positive time (e.g. '2 hours' or '30 minutes')"));
         }
         var trimmedDuration = FormatDurationHours(durationMinutes);
 
@@ -1119,20 +1120,49 @@ public async Task<IActionResult> Update(Guid id, [FromBody] UpdateIlsRequest req
             return hours.ToString("0.##", CultureInfo.InvariantCulture);
         }
 
-        private static bool TryParseDurationHours(string? raw, out int durationMinutes)
+        private static bool TryParseDurationToMinutes(string? raw, out int durationMinutes)
         {
             durationMinutes = 0;
             if (string.IsNullOrWhiteSpace(raw))
                 return false;
 
-            var input = raw.Trim();
-            if (!decimal.TryParse(input, NumberStyles.Number, CultureInfo.InvariantCulture, out var hours))
+            var input = raw.Trim().ToLowerInvariant();
+
+            // Try to parse combined forms like "2 hours 30 minutes", or single units.
+            var hourPattern = new Regex(@"(?<value>[-+]?\d*\.?\d+)\s*(h|hr|hrs|hour|hours)\b", RegexOptions.Compiled);
+            var minutePattern = new Regex(@"(?<value>[-+]?\d*\.?\d+)\s*(m|min|mins|minute|minutes)\b", RegexOptions.Compiled);
+
+            decimal totalMinutes = 0m;
+            var matched = false;
+
+            var hourMatch = hourPattern.Match(input);
+            if (hourMatch.Success && decimal.TryParse(hourMatch.Groups["value"].Value, NumberStyles.Number, CultureInfo.InvariantCulture, out var hours))
+            {
+                totalMinutes += hours * 60m;
+                matched = true;
+            }
+
+            var minuteMatch = minutePattern.Match(input);
+            if (minuteMatch.Success && decimal.TryParse(minuteMatch.Groups["value"].Value, NumberStyles.Number, CultureInfo.InvariantCulture, out var mins))
+            {
+                totalMinutes += mins;
+                matched = true;
+            }
+
+            if (!matched)
+            {
+                // If no explicit unit found, treat plain numeric as minutes (e.g., "30" => 30 minutes).
+                if (!decimal.TryParse(input, NumberStyles.Number, CultureInfo.InvariantCulture, out var numeric))
+                    return false;
+                if (numeric <= 0m)
+                    return false;
+                totalMinutes = numeric;
+            }
+
+            if (totalMinutes <= 0m)
                 return false;
 
-            if (hours <= 0m)
-                return false;
-
-            durationMinutes = (int)Math.Round(hours * 60m, 0, MidpointRounding.AwayFromZero);
+            durationMinutes = (int)Math.Round(totalMinutes, 0, MidpointRounding.AwayFromZero);
             return durationMinutes > 0;
         }
 

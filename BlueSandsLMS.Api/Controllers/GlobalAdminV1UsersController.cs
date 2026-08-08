@@ -1,10 +1,10 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
+using BlueSandsLMS.Application.Services;
+using BlueSandsLMS.Common.DTOs;
 using BlueSandsLMS.Common.DTOs.Admin;
 using BlueSandsLMS.Common.Interfaces.Admin;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
 
 namespace BlueSandsLMS.Api.Controllers
 {
@@ -14,10 +14,16 @@ namespace BlueSandsLMS.Api.Controllers
     public sealed class GlobalAdminV1UsersController : ControllerBase
     {
         private readonly IGlobalAdminService _svc;
-        public GlobalAdminV1UsersController(IGlobalAdminService svc) => _svc = svc;
+        private readonly IAuthService _auth;
+
+        public GlobalAdminV1UsersController(IGlobalAdminService svc, IAuthService auth)
+        {
+            _svc = svc;
+            _auth = auth;
+        }
 
         [HttpGet]
-        public async Task<ActionResult<PagedResult<GlobalAdminUserRowDto>>> Search([FromQuery] UserQuery query, CancellationToken ct)
+        public async Task<ActionResult<BlueSandsLMS.Common.DTOs.PagedResult<GlobalAdminUserRowDto>>> Search([FromQuery] UserQuery query, CancellationToken ct)
             => Ok(await _svc.SearchUsersAsync(query, ct));
 
         [HttpGet("{id:guid}")]
@@ -25,6 +31,21 @@ namespace BlueSandsLMS.Api.Controllers
         {
             var dto = await _svc.GetUserAsync(id, ct);
             return dto is null ? NotFound() : Ok(dto);
+        }
+
+        // New: create a user (only GlobalAdmin)
+        [HttpPost]
+        public async Task<ActionResult<AuthResponseDto>> Create([FromBody] AdminCreateUserDto dto)
+        {
+            try
+            {
+                var res = await _auth.AdminCreateUserAsync(dto);
+                return Ok(res);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         [HttpPost("{id:guid}/activate")]
@@ -43,4 +64,4 @@ namespace BlueSandsLMS.Api.Controllers
         public async Task<ActionResult<ResetPasswordResponse>> ResetPassword(Guid id, CancellationToken ct)
             => Ok(await _svc.ResetPasswordAsync(id, ct));
     }
-}
+}       

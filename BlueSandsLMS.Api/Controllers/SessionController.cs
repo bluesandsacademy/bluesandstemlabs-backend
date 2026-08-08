@@ -274,8 +274,8 @@ namespace BlueSandsLMS.Api.Controllers
             var ownershipError = EnsureOwnership(session);
             if (ownershipError != null) return ownershipError;
 
-            var stepError = ValidateStepGate(session, expectedStep: 2, stepName: "hypothesis");
-            if (stepError != null) return stepError;
+            //var stepError = ValidateStepGate(session, expectedStep: 2, stepName: "hypothesis");
+            //if (stepError != null) return stepError;
 
             if (string.IsNullOrWhiteSpace(request.Text))
             {

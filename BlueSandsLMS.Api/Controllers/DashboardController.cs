@@ -1,7 +1,8 @@
+using BlueSandsLMS.Api.Services;
 using BlueSandsLMS.Common.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
+
 
 namespace BlueSandsLMS.Api.Controllers
 {
@@ -11,28 +12,22 @@ namespace BlueSandsLMS.Api.Controllers
     public class DashboardController : ControllerBase
     {
         private readonly IDashboardService _svc;
+        private readonly ICurrentUser _currentUser;
 
-        public DashboardController(IDashboardService svc) => _svc = svc;
-
-        private Guid CurrentUserId()
+        public DashboardController(IDashboardService svc, ICurrentUser currentUser)
         {
-            var sub = User.FindFirstValue("sub") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
-            return Guid.Parse(sub!);
+            _svc = svc;
+            _currentUser = currentUser;
         }
 
-        private string CurrentRole() => User.FindFirstValue(ClaimTypes.Role) ?? "";
+        private Guid CurrentUserId() => _currentUser.GetUserId();
 
-        private Guid? CurrentSchoolId()
-        {
-            var s = User.FindFirstValue("SchoolId");
-            return Guid.TryParse(s, out var id) ? id : (Guid?)null;
-        }
+        private Guid? CurrentSchoolId() => _currentUser.SchoolId;
 
         [HttpGet("student")]
         public async Task<IActionResult> Student()
         {
-            var role = CurrentRole();
-            if (!string.Equals(role, "Student", StringComparison.OrdinalIgnoreCase))
+            if (!_currentUser.IsInRole("Student"))
                 return Forbid();
 
             var me = CurrentUserId();
@@ -42,8 +37,7 @@ namespace BlueSandsLMS.Api.Controllers
         [HttpGet("teacher")]
         public async Task<IActionResult> Teacher()
         {
-            var role = CurrentRole();
-            if (!string.Equals(role, "Teacher", StringComparison.OrdinalIgnoreCase))
+            if (!_currentUser.IsInRole("Teacher"))
                 return Forbid();
 
             var me = CurrentUserId();
@@ -53,8 +47,7 @@ namespace BlueSandsLMS.Api.Controllers
         [HttpGet("school-admin")]
         public async Task<IActionResult> SchoolAdmin()
         {
-            var role = CurrentRole();
-            if (!string.Equals(role, "SchoolAdmin", StringComparison.OrdinalIgnoreCase))
+            if (!_currentUser.IsInRole("SchoolAdmin"))
                 return Forbid();
 
             var me = CurrentUserId();
@@ -66,12 +59,11 @@ namespace BlueSandsLMS.Api.Controllers
         [HttpGet("global")]
         public async Task<IActionResult> Global()
         {
-            var role = CurrentRole();
-            var allowed = new[] { "GlobalAdmin", "Admin" };
-            if (!allowed.Contains(role, StringComparer.OrdinalIgnoreCase))
+            if (!(_currentUser.IsInRole("GlobalAdmin") || _currentUser.IsInRole("Admin")))
                 return Forbid();
 
             return Ok(await _svc.GetGlobalAsync());
         }
+
     }
 }

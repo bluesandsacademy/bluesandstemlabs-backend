@@ -15,10 +15,15 @@ namespace BlueSandsLMS.Api.Controllers
     public class PhETController : ControllerBase
     {
         private readonly BlueSandsLMSDbContext _db;
+        private readonly IExcelUploadService _uploadService;
+        private readonly ILogger<PhETController> _logger;
 
-        public PhETController(BlueSandsLMSDbContext db)
+        public PhETController(BlueSandsLMSDbContext db, IExcelUploadService uploadService,
+            ILogger<PhETController> logger)
         {
             _db = db;
+            _uploadService = uploadService;
+            _logger = logger;
         }
 
 
@@ -215,5 +220,53 @@ namespace BlueSandsLMS.Api.Controllers
 
             return Ok(popularTopics);
         }
+
+        /// <summary>
+        /// Upload an Excel (.xlsx) file containing PhET simulation data.
+        /// Columns are matched by header name (order does not matter).
+        /// </summary>
+        [HttpPost("upload-excel")]
+        [Consumes("multipart/form-data")]
+        [RequestSizeLimit(20 * 1024 * 1024)] // 20 MB
+        public async Task<IActionResult> UploadExcel(IFormFile file, CancellationToken ct)
+        {
+            if (file is null || file.Length == 0)
+                return BadRequest(new { error = true, message = "No file uploaded." });
+
+            var ext = Path.GetExtension(file.FileName);
+            if (!ext.Equals(".xlsx", StringComparison.OrdinalIgnoreCase) &&
+                !ext.Equals(".xls", StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new { error = true, message = "Only .xlsx or .xls files are supported." });
+            }
+
+            try
+            {
+                await using var stream = file.OpenReadStream();
+                var count = await _uploadService.UploadPhETExcelAsync(stream);
+
+                _logger.LogInformation("PhET Excel upload complete: {Count} records inserted", count);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = $"{count} simulation(s) imported successfully.",
+                    count
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "PhET Excel upload failed");
+                return StatusCode(StatusCodes.Status500InternalServerError, new
+                {
+                    error = true,
+                    message = "Import failed: " + ex.Message
+                });
+            }
+        }
     }
+
+
+
 }
+

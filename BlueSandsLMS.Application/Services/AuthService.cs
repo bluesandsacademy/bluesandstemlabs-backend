@@ -1,4 +1,5 @@
 using BlueSandsLMS.Application.Emails;
+using BlueSandsLMS.Application.Services;
 using BlueSandsLMS.Common.DTOs;
 using BlueSandsLMS.Common.Interfaces;
 using BlueSandsLMS.Core.Entities;
@@ -107,7 +108,7 @@ namespace BlueSandsLMS.Application.Services
             var claims = new List<Claim>
             {
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-                new Claim(ClaimTypes.Role, roleName),
+                new Claim("role", roleName),        // Use literal "role"
                 new Claim("token_type", "refresh")
             };
 
@@ -218,7 +219,6 @@ namespace BlueSandsLMS.Application.Services
                 appName: brand.AppName,
                 role: "Student",
                 firstName: FirstNameOf(user.FullName),
-                loginLink: loginUrl,
                 verifyLink: verifyUrl,
                 supportEmail: brand.SupportEmail,
                 supportPhone: brand.SupportPhone
@@ -348,6 +348,34 @@ namespace BlueSandsLMS.Application.Services
             _db.Users.Add(user);
             await _db.SaveChangesAsync();
 
+            // Create email verification token & send welcome/verification email (admin-created users should still verify)
+            try
+            {
+                var (plainToken, _) = await CreateEmailVerifyTokenAsync(user, TimeSpan.FromDays(3));
+
+                var brand = SiteBrandResolver.Resolve(null, _config);
+                var apiBase = _config["App:BaseUrl"]?.TrimEnd('/') ?? "http://localhost:5245";
+                var verifyUrl = $"{apiBase}/api/auth/verify-email?token={Uri.EscapeDataString(plainToken)}&site={brand.SiteKey}";
+                var loginUrl = $"{brand.FrontendBaseUrl}/login";
+
+                var roleName = await GetRoleNameAsync(user.RoleId);
+                var subject = $"🎉 Welcome to {brand.AppName} – The Future of Learning Awaits!";
+                var html = EmailTemplates.BuildWelcomeEmailHtml(
+                    appName: brand.AppName,
+                    role: roleName,
+                    firstName: FirstNameOf(user.FullName),
+                    verifyLink: verifyUrl,
+                    supportEmail: brand.SupportEmail,
+                    supportPhone: brand.SupportPhone
+                );
+
+                await _email.SendAsync(user.Email, subject, html, brand.FromEmail, brand.FromDisplayName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Welcome email failed for admin-created user {Email}; user creation still succeeded", user.Email);
+            }
+
             var couponResult = await TryApplyCouponAsync(dto.CouponCode);
             var res = await GenerateAuthResponse(user);
             res.PromoApplied = couponResult.applied;
@@ -437,7 +465,6 @@ namespace BlueSandsLMS.Application.Services
                 appName: brand.AppName,
                 role: schoolAdminRole.Name,
                 firstName: FirstNameOf(user.FullName),
-                loginLink: loginUrl,
                 verifyLink: verifyUrl,
                 supportEmail: brand.SupportEmail,
                 supportPhone: brand.SupportPhone
@@ -632,7 +659,6 @@ public async Task ChangePasswordAsync(Guid userId, string currentPassword, strin
                 appName: brand.AppName,
                 role: roleName,
                 firstName: FirstNameOf(user.FullName),
-                loginLink: loginUrl,
                 verifyLink: verifyUrl,
                 supportEmail: brand.SupportEmail,
                 supportPhone: brand.SupportPhone
@@ -810,7 +836,6 @@ public async Task ChangePasswordAsync(Guid userId, string currentPassword, strin
                     appName:      brand.AppName,
                     role:         "Student",
                     firstName:    FirstNameOf(user.FullName),
-                    loginLink:    loginUrl,
                     verifyLink:   loginUrl,
                     supportEmail: brand.SupportEmail,
                     supportPhone: brand.SupportPhone
@@ -830,7 +855,7 @@ public async Task ChangePasswordAsync(Guid userId, string currentPassword, strin
         }
 
 
-        private async Task<AuthResponseDto> GenerateAuthResponse(User user, TimeSpan? tokenTtl = null)
+private async Task<AuthResponseDto> GenerateAuthResponse(User user, TimeSpan? tokenTtl = null)
 {
     var secret = GetJwtSecret();
     var issuer = _config["Jwt:Issuer"] ?? string.Empty;
@@ -847,7 +872,7 @@ public async Task ChangePasswordAsync(Guid userId, string currentPassword, strin
     {
         new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
         new Claim("FullName", user.FullName ?? string.Empty),
-        new Claim(ClaimTypes.Role, roleName)
+        new Claim("role", roleName)
     };
 
     if (user.SchoolId.HasValue && user.SchoolId.Value != Guid.Empty)
