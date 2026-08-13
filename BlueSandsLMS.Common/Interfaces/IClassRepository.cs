@@ -1,7 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using BlueSandsLMS.Common.DTOs;  
+using BlueSandsLMS.Common.DTOs;
+  
 
 namespace BlueSandsLMS.Common.Interfaces
 {
@@ -15,6 +13,7 @@ namespace BlueSandsLMS.Common.Interfaces
         Task EnrollByEmailAsync(Guid classId, string email);
         Task BulkEnrollAsync(Guid classId, IEnumerable<string> emails);
 
+        Task AttachTeacherAsync(Guid classId, Guid teacherUserId);
 
         Task<(string code, DateTime? expiresAt)> RotateInviteCodeAsync(Guid classId, int expireDays);
         Task<Guid?> GetClassroomIdByInviteAsync(string code);
@@ -22,5 +21,6 @@ namespace BlueSandsLMS.Common.Interfaces
         Task<List<ClassSummaryDto>> GetMyClassesAsync(Guid userId);
 
         Task<List<ClassSummaryDto>> GetClassesBySchoolIdAsync(Guid schoolId);
+        Task AttachStudentAsync(Guid classId, Guid studentUserId);
     }
 }

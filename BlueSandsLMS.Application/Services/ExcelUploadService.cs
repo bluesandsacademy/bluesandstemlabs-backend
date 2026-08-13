@@ -136,37 +136,62 @@ public class ExcelUploadService : IExcelUploadService
                     Id = Guid.NewGuid(),
                     Title = title,
                     SimulationUrl = simulationUrl,
-                    ThumbnailUrl = GetValue<string>(worksheet, row, columnMap, "ThumbnailUrl"),
+                    ThumbnailUrl = GetValue<string>(worksheet, row, columnMap, "ThumbnailUrl")
+         ?? GetValue<string>(worksheet, row, columnMap, "PreviewImage"),
                     Topic = topic,
-                    Description = GetValue<string>(worksheet, row, columnMap, "Description"),
-                    LearningGoals = GetValue<string>(worksheet, row, columnMap, "LearningGoals"),
-                    GradeLevel = GetValue<string>(worksheet, row, columnMap, "GradeLevel"),
-                    Standards = GetValue<string>(worksheet, row, columnMap, "Standards"),
-                    Keywords = GetValue<string>(worksheet, row, columnMap, "Keywords"),
+                    Description = GetValue<string>(worksheet, row, columnMap, "Description")
+         ?? GetValue<string>(worksheet, row, columnMap, "OverviewText"),
+                    LearningGoals = GetValue<string>(worksheet, row, columnMap, "LearningGoals")
+         ?? GetValue<string>(worksheet, row, columnMap, "LearningObjectives"),
+                    GradeLevel = GetValue<string>(worksheet, row, columnMap, "GradeLevel")
+         ?? GetValue<string>(worksheet, row, columnMap, "TargetGradeBand"),
+                    Standards = GetValue<string>(worksheet, row, columnMap, "Standards")
+         ?? GetValue<string>(worksheet, row, columnMap, "CurriculumStandards"),
+                    Keywords = GetValue<string>(worksheet, row, columnMap, "Keywords")
+         ?? GetValue<string>(worksheet, row, columnMap, "SearchTerms"),
                     IsActive = true,
                     DateCreated = DateTime.UtcNow,
                     LastUpdated = null,
-                    Type = GetValue<string>(worksheet, row, columnMap, "Type"),
-                    NumberOfScreens = GetValue<int?>(worksheet, row, columnMap, "NumberOfScreens"),
-                    ScreenNames = GetValue<string>(worksheet, row, columnMap, "ScreenNames"),
+                    Type = GetValue<string>(worksheet, row, columnMap, "Type")
+         ?? GetValue<string>(worksheet, row, columnMap, "ResourceFormat"),
+                    NumberOfScreens = GetValue<int?>(worksheet, row, columnMap, "NumberOfScreens")
+         ?? GetValue<int?>(worksheet, row, columnMap, "ScreenCount"),
+                    ScreenNames = GetValue<string>(worksheet, row, columnMap, "ScreenNames")
+         ?? GetValue<string>(worksheet, row, columnMap, "AvailableScreens"),
                     SimPage = simPage,
                     SimString = simString,
-                    TeacherTipsDoc = GetValue<string>(worksheet, row, columnMap, "TeacherTipsDoc"),
-                    PdfUrl = GetValue<string>(worksheet, row, columnMap, "PdfUrl"),
-                    RunnableResource = GetValue<string>(worksheet, row, columnMap, "RunnableResource"),
-                    CheerpJRunnable = GetValue<string>(worksheet, row, columnMap, "CheerpJRunnable"),
-                    Filename = GetValue<string>(worksheet, row, columnMap, "Filename"),
-                    Physics = GetBoolValue(worksheet, row, columnMap, "Physics"),
-                    MathStatistics = GetBoolValue(worksheet, row, columnMap, "MathStatistics"),
-                    Chemistry = GetBoolValue(worksheet, row, columnMap, "Chemistry"),
-                    EarthSpace = GetBoolValue(worksheet, row, columnMap, "EarthSpace"),
-                    Biology = GetBoolValue(worksheet, row, columnMap, "Biology"),
-                    LowGradeLevel = GetValue<string>(worksheet, row, columnMap, "LowGradeLevel"),
-                    HighGradeLevel = GetValue<string>(worksheet, row, columnMap, "HighGradeLevel"),
-                    MainTopics = GetValue<string>(worksheet, row, columnMap, "MainTopics"),
-                    SampleLearningGoals = GetValue<string>(worksheet, row, columnMap, "SampleLearningGoals"),
-                    Translations = GetValue<string>(worksheet, row, columnMap, "Translations"),
-                    Published = GetValue<string>(worksheet, row, columnMap, "Published"),
+                    TeacherTipsDoc = GetValue<string>(worksheet, row, columnMap, "TeacherTipsDoc")
+         ?? GetValue<string>(worksheet, row, columnMap, "InstructorGuide"),
+                    PdfUrl = GetValue<string>(worksheet, row, columnMap, "PdfUrl")
+         ?? GetValue<string>(worksheet, row, columnMap, "GuideDocumentUrl"),
+                    RunnableResource = GetValue<string>(worksheet, row, columnMap, "RunnableResource")
+         ?? GetValue<string>(worksheet, row, columnMap, "ExecutionResource"),
+                    CheerpJRunnable = GetValue<string>(worksheet, row, columnMap, "CheerpJRunnable")
+         ?? GetValue<string>(worksheet, row, columnMap, "LegacyRuntimeUrl"),
+                    Filename = GetValue<string>(worksheet, row, columnMap, "Filename")
+         ?? GetValue<string>(worksheet, row, columnMap, "ResourceFileName"),
+                    Physics = GetBoolValue(worksheet, row, columnMap, "Physics")
+         || GetBoolValue(worksheet, row, columnMap, "SupportsPhysics"),
+                    MathStatistics = GetBoolValue(worksheet, row, columnMap, "MathStatistics")
+         || GetBoolValue(worksheet, row, columnMap, "SupportsMathematics"),
+                    Chemistry = GetBoolValue(worksheet, row, columnMap, "Chemistry")
+         || GetBoolValue(worksheet, row, columnMap, "SupportsChemistry"),
+                    EarthSpace = GetBoolValue(worksheet, row, columnMap, "EarthSpace")
+         || GetBoolValue(worksheet, row, columnMap, "SupportsEarthScience"),
+                    Biology = GetBoolValue(worksheet, row, columnMap, "Biology")
+         || GetBoolValue(worksheet, row, columnMap, "SupportsBiology"),
+                    LowGradeLevel = GetValue<string>(worksheet, row, columnMap, "LowGradeLevel")
+         ?? GetValue<string>(worksheet, row, columnMap, "MinimumGradeBand"),
+                    HighGradeLevel = GetValue<string>(worksheet, row, columnMap, "HighGradeLevel")
+         ?? GetValue<string>(worksheet, row, columnMap, "MaximumGradeBand"),
+                    MainTopics = GetValue<string>(worksheet, row, columnMap, "MainTopics")
+         ?? GetValue<string>(worksheet, row, columnMap, "PrimaryConcepts"),
+                    SampleLearningGoals = GetValue<string>(worksheet, row, columnMap, "SampleLearningGoals")
+         ?? GetValue<string>(worksheet, row, columnMap, "ExampleObjectives"),
+                    Translations = GetValue<string>(worksheet, row, columnMap, "Translations")
+         ?? GetValue<string>(worksheet, row, columnMap, "SupportedLanguages"),
+                    Published = GetValue<string>(worksheet, row, columnMap, "Published")
+         ?? GetValue<string>(worksheet, row, columnMap, "PublicationDate"),
                     IsFree = true
                 };
 

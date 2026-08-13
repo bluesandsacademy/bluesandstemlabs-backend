@@ -1,9 +1,6 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.EntityFrameworkCore;
-using BlueSandsLMS.Core.Entities;
 using BlueSandsLMS.Core.Common;
+using BlueSandsLMS.Core.Entities;
+using Microsoft.EntityFrameworkCore;
 
 
 namespace BlueSandsLMS.Infrastructure
@@ -325,24 +322,44 @@ modelBuilder.Entity<SchoolInquiry>(entity =>
         entity.Property(e => e.DateCreated).HasDefaultValueSql("GETDATE()");
     });
 
+            modelBuilder.Entity<PhETSimulation>(entity =>
+            {
+                // Primary Key
+                entity.HasKey(e => e.Id);
 
-modelBuilder.Entity<PhETSimulation>(entity =>
-{
-    entity.HasKey(e => e.Id);
-    entity.HasIndex(e => e.Title);
-    entity.HasIndex(e => e.Physics);
-    entity.HasIndex(e => e.Chemistry);
-    entity.HasIndex(e => e.MathStatistics);
-    entity.HasIndex(e => e.Biology);
-    entity.HasIndex(e => e.EarthSpace);
-    entity.HasIndex(e => e.LowGradeLevel);
-    entity.HasIndex(e => e.HighGradeLevel);
-    entity.HasIndex(e => e.IsActive);
-    entity.Property(e => e.DateCreated).HasDefaultValueSql("GETUTCDATE()");
-});
+                // Default Values
+                entity.Property(e => e.DateCreated)
+                    .HasDefaultValueSql("GETUTCDATE()");
+
+                entity.Property(e => e.Physics)
+                    .HasDefaultValue(false);
+
+                entity.Property(e => e.MathStatistics)
+                    .HasDefaultValue(false);
+
+                entity.Property(e => e.Chemistry)
+                    .HasDefaultValue(false);
+
+                entity.Property(e => e.EarthSpace)
+                    .HasDefaultValue(false);
+
+                entity.Property(e => e.Biology)
+                    .HasDefaultValue(false);
+
+                entity.Property(e => e.IsFree)
+                    .HasDefaultValue(false);
+
+                // Valid Indexes (Only indexed properties that are NOT nvarchar(max))
+                entity.HasIndex(e => e.Physics);
+                entity.HasIndex(e => e.MathStatistics);
+                entity.HasIndex(e => e.Chemistry);
+                entity.HasIndex(e => e.EarthSpace);
+                entity.HasIndex(e => e.Biology);
+                entity.HasIndex(e => e.IsActive);
+            });
 
 
-modelBuilder.Entity<ExperimentLaunch>(entity =>
+            modelBuilder.Entity<ExperimentLaunch>(entity =>
 {
     entity.HasIndex(e => e.PhETSimulationId);
     

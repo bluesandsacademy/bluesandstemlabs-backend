@@ -1,5 +1,4 @@
-using System;
-using System.Collections.Generic;
+
 
 namespace BlueSandsLMS.Common.DTOs
 {
@@ -9,6 +8,7 @@ namespace BlueSandsLMS.Common.DTOs
     public record EnrollByEmailDto(string Email);
     public record BulkEnrollDto(List<string> Emails);
 
+    public record AttachTeacherDto(Guid TeacherId);
 
     public enum AssignmentType { Lab = 0, Quiz = 1 }
     public record CreateAssignmentDto(Guid ClassroomId, string Title, AssignmentType Type, string ResourceCode, DateTime? DueAt);

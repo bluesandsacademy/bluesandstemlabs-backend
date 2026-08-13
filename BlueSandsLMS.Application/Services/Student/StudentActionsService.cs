@@ -28,7 +28,7 @@ namespace BlueSandsLMS.Application.Services.Student
     }
 
 
-    var requiresSubscription = phetSim != null && !phetSim.IsFree;
+    var requiresSubscription = phetSim != null && !phetSim.IsActive;
     if (requiresSubscription)
     {
         var now      = DateTime.UtcNow;

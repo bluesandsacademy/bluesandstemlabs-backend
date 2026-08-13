@@ -10,7 +10,7 @@ namespace BlueSandsLMS.Common.Interfaces
         Task<UpsertResultDto> UpsertTeacherAsync(Guid adminUserId, Guid schoolId, UpsertTeacherDto dto);
         Task<IReadOnlyList<UpsertResultDto>> BulkUpsertTeachersAsync(Guid adminUserId, Guid schoolId, BulkUpsertTeachersDto dto);
 
-        Task<UpsertResultDto> UpsertStudentAsync(Guid adminUserId, Guid schoolId, UpsertStudentDto dto);
+        Task<UpsertResultDto> UpsertStudentAsync(UpsertStudentDto dto);
         Task<IReadOnlyList<UpsertResultDto>> BulkUpsertStudentsAsync(Guid adminUserId, Guid schoolId, BulkUpsertStudentsDto dto);
 
 

@@ -354,5 +354,19 @@ public async Task<IActionResult> UpdateMe(
         email = user.Email
     });
 }
+
+        [HttpPost("users/register")]
+        public async Task<ActionResult<UserSummaryDto>> RegisterAs([FromBody] RegisterUserAsDto dto)
+        {
+            try
+            {
+                var res = await _auth.RegisterUserAsAsync(dto);
+                return Ok(res);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
     }
 }

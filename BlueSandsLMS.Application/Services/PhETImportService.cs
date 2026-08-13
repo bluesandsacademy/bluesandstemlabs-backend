@@ -39,7 +39,7 @@ namespace BlueSandsLMS.Application.Services
             }
             finally
             {
-                try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch {  }
+                try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
             }
         }
 
@@ -131,7 +131,7 @@ namespace BlueSandsLMS.Application.Services
             var existing = new Dictionary<string, PhETSimulation>(StringComparer.OrdinalIgnoreCase);
             foreach (var sim in existingList)
             {
-                var key = sim.Title.ToLower();
+                var key = sim.Title?.ToLower() ?? string.Empty;
                 if (!existing.ContainsKey(key))
                     existing[key] = sim;
                 else
@@ -186,7 +186,6 @@ namespace BlueSandsLMS.Application.Services
 
                     if (existing.TryGetValue(key, out var row))
                     {
-
                         row.Type = NullIfEmpty(type);
                         row.NumberOfScreens = numScreens;
                         row.ScreenNames = NullIfEmpty(screenNames);
@@ -220,6 +219,9 @@ namespace BlueSandsLMS.Application.Services
                         {
                             Id = Guid.NewGuid(),
                             Title = title,
+                            // required non-null fields - fall back to simPage/simString or empty
+                            SimulationUrl = NullIfEmpty(simPage) ?? NullIfEmpty(simString) ?? string.Empty,
+                            Topic = NullIfEmpty(mainTopics) ?? NullIfEmpty(keywords) ?? string.Empty,
                             Type = NullIfEmpty(type),
                             NumberOfScreens = numScreens,
                             ScreenNames = NullIfEmpty(screenNames),
@@ -227,6 +229,9 @@ namespace BlueSandsLMS.Application.Services
                             SimString = NullIfEmpty(simString),
                             TeacherTipsDoc = NullIfEmpty(teacherTips),
                             PdfUrl = NullIfEmpty(pdfUrl),
+                            RunnableResource = NullIfEmpty(runnableResource),
+                            CheerpJRunnable = NullIfEmpty(cheerpjRunnable),
+                            Filename = NullIfEmpty(filename),
                             Physics = physics,
                             MathStatistics = mathStats,
                             Chemistry = chemistry,
@@ -235,16 +240,12 @@ namespace BlueSandsLMS.Application.Services
                             LowGradeLevel = NullIfEmpty(lowGrade),
                             HighGradeLevel = NullIfEmpty(highGrade),
                             MainTopics = NullIfEmpty(mainTopics),
-                            Keywords = NullIfEmpty(keywords),
-                            Description = NullIfEmpty(description),
                             SampleLearningGoals = NullIfEmpty(learningGoalsNew),
                             Translations = NullIfEmpty(translations),
                             Published = NullIfEmpty(published),
-                            RunnableResource = NullIfEmpty(runnableResource),
-                            CheerpJRunnable = NullIfEmpty(cheerpjRunnable),
-                            Filename = NullIfEmpty(filename),
 
                             IsActive = true,
+                            IsFree = false,
                             DateCreated = DateTime.UtcNow
                         };
                         _db.PhETSimulations.Add(rowNew);

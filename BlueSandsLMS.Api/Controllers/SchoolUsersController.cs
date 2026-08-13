@@ -98,10 +98,9 @@ namespace BlueSandsLMS.Api.Controllers
 
 
         [HttpPost("students/upsert")]
-        public async Task<IActionResult> UpsertStudent([FromBody] UpsertStudentDto dto, [FromQuery] Guid? schoolId = null)
+        public async Task<IActionResult> UpsertStudent([FromBody] UpsertStudentDto dto)
         {
-            var sid = schoolId ?? RequireSchoolId();
-            var res = await _svc.UpsertStudentAsync(AdminUserId(), sid, dto);
+            var res = await _svc.UpsertStudentAsync( dto);
             return Ok(res);
         }
 

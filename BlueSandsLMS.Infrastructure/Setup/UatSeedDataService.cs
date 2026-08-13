@@ -280,6 +280,7 @@ namespace BlueSandsLMS.Infrastructure.Setup
             sim.LearningGoals = JsonSerializer.Serialize(config, JsonOptions);
             sim.Description = $"UAT seeded simulation for {subject}.";
             sim.LastUpdated = DateTime.UtcNow;
+
             return sim.Id;
         }
 

@@ -1,28 +1,44 @@
-using System.Text;
+using BlueSandsLMS.Application.Emails;
 using BlueSandsLMS.Common.DTOs;
 using BlueSandsLMS.Common.DTOs.Dashboard;
 using BlueSandsLMS.Common.Interfaces;
 using BlueSandsLMS.Infrastructure;
 using Microsoft.EntityFrameworkCore;
-using BCrypt.Net;
-using BlueSandsLMS.Common.DTOs.Admin;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace BlueSandsLMS.Application.Services.Dashboard
 {
+    using DashboardLeaderboardEntry = BlueSandsLMS.Common.DTOs.LeaderboardEntry;
     using ISchoolAdminAnalytics = BlueSandsLMS.Common.Interfaces.Dashboard.ISchoolAdminService;
     using ISchoolAdminOps = BlueSandsLMS.Common.Interfaces.ISchoolAdminService;
-
-    using DashboardLeaderboardEntry = BlueSandsLMS.Common.DTOs.LeaderboardEntry;
 
     public sealed class SchoolAdminService : ISchoolAdminAnalytics, ISchoolAdminOps
     {
         private readonly BlueSandsLMSDbContext _db;
         private readonly ICacheBustService _cacheBust;
+        private readonly IEmailService _email;
+        private readonly IConfiguration _config;
+        private readonly ILogger<SchoolAdminService> _logger;
+        private readonly ICurrentUser _currentUser;
 
-        public SchoolAdminService(BlueSandsLMSDbContext db, ICacheBustService cacheBust)
+        public SchoolAdminService(
+            BlueSandsLMSDbContext db,
+            ICacheBustService cacheBust,
+            IEmailService email,
+            IConfiguration config,
+            ILogger<SchoolAdminService> logger,
+            ICurrentUser currentUser)
         {
-            _db = db;
-            _cacheBust = cacheBust;
+            _db = db ?? throw new ArgumentNullException(nameof(db));
+            _cacheBust = cacheBust ?? throw new ArgumentNullException(nameof(cacheBust));
+            _email = email ?? throw new ArgumentNullException(nameof(email));
+            _config = config ?? throw new ArgumentNullException(nameof(config));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _currentUser = currentUser ?? throw new ArgumentNullException(nameof(currentUser));
         }
 
         public async Task<SchoolOverviewDto> GetOverviewAsync(Guid schoolId, CancellationToken ct)
@@ -397,14 +413,14 @@ namespace BlueSandsLMS.Application.Services.Dashboard
             return results;
         }
 
-        public async Task<UpsertResultDto> UpsertStudentAsync(Guid adminUserId, Guid schoolId, UpsertStudentDto dto)
-            => await UpsertUserForSchoolAsync(schoolId, dto.Email, dto.FullName, dto.Phone, dto.Country, "Student", CancellationToken.None);
+        public async Task<UpsertResultDto> UpsertStudentAsync( UpsertStudentDto dto)
+            => await RegisterStudentAsync( dto, CancellationToken.None);
 
         public async Task<IReadOnlyList<UpsertResultDto>> BulkUpsertStudentsAsync(Guid adminUserId, Guid schoolId, BulkUpsertStudentsDto dto)
         {
             var results = new List<UpsertResultDto>();
-            foreach (var s in dto.Students.DistinctBy(x => x.Email.Trim().ToLowerInvariant()))
-                results.Add(await UpsertStudentAsync(adminUserId, schoolId, s));
+            //foreach (var s in dto.Students.DistinctBy(x => x.Email.Trim().ToLowerInvariant()))
+            //    results.Add(await UpsertStudentAsync(adminUserId, schoolId, s));
             _cacheBust.InvalidateSchoolAdmin(schoolId);
             return results;
         }
@@ -551,6 +567,164 @@ var newUser = new Core.Entities.User
 
             if (created + updated > 0) _cacheBust.InvalidateSchoolAdmin(schoolId);
             return new BulkUploadResult(created, updated, failed, errors);
+        }
+
+
+        // New: register student endpoint for school admin; schoolId inferred from current user
+        public async Task<UpsertResultDto> RegisterStudentAsync(UpsertStudentDto dto,CancellationToken ct)
+        {
+            var schoolId = _currentUser.SchoolId ?? throw new InvalidOperationException("Current user does not belong to a school.");
+
+            // Legacy mapping: email was passed in dto.Gender in older calls. Prefer explicit Email when available.
+            // If UpsertStudentDto has an Email property use it; otherwise fall back to Gender field.
+            var studentEmail = EmailGenerator.GenerateEmailFromFullName(dto.FullName);
+            if (string.IsNullOrWhiteSpace(studentEmail))
+                throw new Exception("Student email is required in request.");
+
+            var fullName = dto.FullName;
+            var phone = dto.Phone;
+            var country = dto.Country;
+
+            var user = await _db.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.Email == studentEmail);
+
+            var targetRole = await _db.Roles.FirstOrDefaultAsync(r => r.Name == "Student")
+                             ?? throw new Exception($"Role 'Student' not found.");
+
+            if (user == null)
+            {
+                var plainPassword = GenerateSecurePassword(10);
+                var newUser = new Core.Entities.User
+                {
+                    Id = Guid.NewGuid(),
+                    Email = studentEmail,
+                    FullName = fullName,
+                    Phone = phone ?? string.Empty,
+                    Country = country ?? string.Empty,
+                    RoleId = targetRole.Id,
+                    SchoolId = schoolId,
+                    DateCreated = DateTime.UtcNow,
+                    IsActive = true,
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(plainPassword),
+                    IsEmailVerified = false
+                };
+
+                _db.Users.Add(newUser);
+                await _db.SaveChangesAsync();
+                _cacheBust.InvalidateSchoolAdmin(schoolId);
+
+                // Send a welcome email using the same template + SendAsync pattern used in AuthService.RegisterAsync.
+                try
+                {
+                    var adminEmail = _currentUser.Email;
+                    if (!string.IsNullOrWhiteSpace(adminEmail))
+                    {
+                        var brand = SiteBrandResolver.Resolve(null, _config);
+                        // In AuthService.RegisterAsync a verify token/link is included; here we reuse the same template
+                        // but provide the login URL as the "verify" link since we don't create a token here.
+                        var apiBase = _config["App:BaseUrl"]?.TrimEnd('/') ?? "http://localhost:5245";
+                        var loginUrl = $"{brand.FrontendBaseUrl}/login";
+
+                        var subject = $"🎉 Welcome to {brand.AppName} – The Future of Learning Awaits!";
+                        var firstName = !string.IsNullOrWhiteSpace(fullName)
+                            ? fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0]
+                            : "there";
+
+                        var html = EmailTemplates.BuildWelcomeEmailHtml(
+                            role: "Student",
+                            firstName: firstName,
+                            verifyLink: loginUrl,
+                            supportEmail: brand.SupportEmail,
+                            supportPhone: brand.SupportPhone,
+                            appName: brand.AppName
+                        );
+
+                        await _email.SendAsync(adminEmail, subject, html, brand.FromEmail, brand.FromDisplayName);
+
+
+                        // Additionally send credentials block to admin separately (so admin sees username/password clearly).
+                        var credSubject = $"New student account created for {brand.AppName}";
+                        var credHtml = $@"<!doctype html><html><body style=""font-family:Arial,Helvetica,sans-serif;color:#111;line-height:1.6"">
+                            <p>Dear School Admin,</p>
+
+                            <p>A new student account was created for your school on <strong>{WebUtility.HtmlEncode(brand.AppName)}</strong>.</p>
+
+                            <p><strong>Student</strong>: {WebUtility.HtmlEncode(fullName)}<br/>
+                            <strong>Email (username)</strong>: {WebUtility.HtmlEncode(studentEmail)}<br/>
+                            <strong>Temporary password</strong>: <strong>{WebUtility.HtmlEncode(plainPassword)}</strong>
+                            </p>
+
+                            <p>Please provide these credentials to the student. They should sign in at <a href=""{loginUrl}"">{WebUtility.HtmlEncode(loginUrl)}</a> and change the password on first login.</p>
+
+                            <p>If you have any trouble, contact support at <a href=""mailto:{WebUtility.HtmlEncode(brand.SupportEmail)}"">{WebUtility.HtmlEncode(brand.SupportEmail)}</a>.</p>
+
+                            <p>Kind regards,<br/>{WebUtility.HtmlEncode(brand.AppName)} Team</p>
+                            </body></html>";
+
+                        //await _email.SendAsync(adminEmail, credSubject, credHtml, brand.FromEmail, brand.FromDisplayName);
+                        // Use same SendAsync signature as AuthService
+                        await _email.SendAsync(adminEmail, credSubject, credHtml, brand.FromEmail, brand.FromDisplayName);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to send new-student credentials to current admin user");
+                }
+
+                return new UpsertResultDto(studentEmail, "created", newUser.Id, "Student", schoolId);
+            }
+
+            if (user.SchoolId.HasValue && user.SchoolId.Value != schoolId)
+                throw new Exception($"User '{studentEmail}' is already linked to another school.");
+
+            if (!user.SchoolId.HasValue) user.SchoolId = schoolId;
+            if (user.RoleId != targetRole.Id) user.RoleId = targetRole.Id;
+
+            if (string.IsNullOrWhiteSpace(user.FullName) && !string.IsNullOrWhiteSpace(fullName)) user.FullName = fullName;
+            if (string.IsNullOrWhiteSpace(user.Phone) && !string.IsNullOrWhiteSpace(phone)) user.Phone = phone;
+            if (string.IsNullOrWhiteSpace(user.Country) && !string.IsNullOrWhiteSpace(country)) user.Country = country;
+
+            await _db.SaveChangesAsync();
+            _cacheBust.InvalidateSchoolAdmin(schoolId);
+            return new UpsertResultDto(studentEmail, "updated", user.Id, "Student", schoolId);
+        }
+
+        // --- helpers ---
+
+        private static string GenerateSecurePassword(int length)
+        {
+            if (length < 4) throw new ArgumentException("Password length must be at least 4 to include required character classes.", nameof(length));
+
+            const string lowers = "abcdefghijklmnopqrstuvwxyz";
+            const string uppers = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            const string digits = "0123456789";
+            const string symbols = "!@#$%^&*()_-+=[]{}|;:,.<>?";
+
+            var all = lowers + uppers + digits + symbols;
+            var bytes = RandomNumberGenerator.GetBytes(length);
+            var sb = new StringBuilder(length);
+
+            // Ensure at least one of each required char type for stronger passwords
+            sb.Append(lowers[bytes[0] % lowers.Length]);
+            sb.Append(uppers[bytes[1] % uppers.Length]);
+            sb.Append(digits[bytes[2] % digits.Length]);
+            sb.Append(symbols[bytes[3] % symbols.Length]);
+
+            for (int i = 4; i < length; i++)
+            {
+                sb.Append(all[bytes[i] % all.Length]);
+            }
+
+            // Simple Fisher–Yates shuffle
+            var arr = sb.ToString().ToCharArray();
+            for (int i = arr.Length - 1; i > 0; i--)
+            {
+                var j = RandomNumberGenerator.GetInt32(i + 1);
+                var tmp = arr[i];
+                arr[i] = arr[j];
+                arr[j] = tmp;
+            }
+
+            return new string(arr);
         }
     }
 }

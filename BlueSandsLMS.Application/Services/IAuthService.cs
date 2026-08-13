@@ -21,5 +21,6 @@ namespace BlueSandsLMS.Application.Services
 
         Task<AuthResponseDto> GoogleSignInAsync(string idToken, CancellationToken ct = default);
         Task<AuthResponseDto> GoogleSignUpAsync(GoogleSignUpDto dto, string? origin = null, CancellationToken ct = default);
+        Task<AuthResponseDto> RegisterUserAsAsync(RegisterUserAsDto dto, string? origin = null);
     }
 }

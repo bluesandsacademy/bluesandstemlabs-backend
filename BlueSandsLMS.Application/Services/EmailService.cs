@@ -1,7 +1,7 @@
 using BlueSandsLMS.Common.Interfaces;
 using Microsoft.Extensions.Logging;
 
-namespace BlueSandsLMS.Application.ServicesF
+namespace BlueSandsLMS.Application.Services
 {
     public class EmailService : IEmailService
     {

@@ -252,9 +252,9 @@ namespace BlueSandsLMS.Api.Controllers
                 .Select(x => new
                 {
                     x.Id,
-                    x.Title,
-                    x.IsFree,
-                    Url = x.RunnableResource ?? x.SimulationUrl ?? x.SimPage
+                    Title = x.Title,
+                    IsActive = x.IsActive,
+                    Url = x.SimulationUrl
                 })
                 .FirstOrDefaultAsync(ct);
 
@@ -271,7 +271,7 @@ namespace BlueSandsLMS.Api.Controllers
                 return Unauthorized();
 
             var now = DateTime.UtcNow;
-            var hasAccess = sim.IsFree || await _db.Subscriptions.AsNoTracking()
+            var hasAccess = sim.IsActive || await _db.Subscriptions.AsNoTracking()
                 .AnyAsync(x =>
                     x.Active &&
                     x.StartsAt <= now &&

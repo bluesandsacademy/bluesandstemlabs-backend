@@ -56,53 +56,62 @@ namespace BlueSandsLMS.Api.Controllers
             {
                 var searchLower = search.ToLower();
                 query = query.Where(s =>
-                    s.Title.ToLower().Contains(searchLower) ||
-                    (s.Description != null && s.Description.ToLower().Contains(searchLower)) ||
-                    (s.Keywords != null && s.Keywords.ToLower().Contains(searchLower)) ||
-                    (s.MainTopics != null && s.MainTopics.ToLower().Contains(searchLower))
+                    s.Title.Contains(searchLower) ||
+                    (s.Description != null && s.Description.Contains(searchLower)) ||
+                    (s.Keywords != null && s.Keywords.Contains(searchLower)) ||
+                    (s.Topic != null && s.Topic.Contains(searchLower)) ||
+                    (s.MainTopics != null && s.MainTopics.Contains(searchLower))
                 );
             }
 
             var total = await query.CountAsync(ct);
 
             var items = await query
-                .OrderBy(s => s.Title)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .Select(s => new PhETSimulationDto
-                {
-
-                    Id = s.Id,
-                    Title = s.Title,
-                    Type = s.Type,
-                    NumberOfScreens = s.NumberOfScreens,
-                    ScreenNames = s.ScreenNames,
-                    SimPage = s.SimPage,
-                    SimString = s.SimString,
-                    TeacherTipsDoc = s.TeacherTipsDoc,
-                    PdfUrl = s.PdfUrl,
-                    Physics = s.Physics,
-                    MathStatistics = s.MathStatistics,
-                    Chemistry = s.Chemistry,
-                    EarthSpace = s.EarthSpace,
-                    Biology = s.Biology,
-                    LowGradeLevel = s.LowGradeLevel,
-                    HighGradeLevel = s.HighGradeLevel,
-                    MainTopics = s.MainTopics,
-                    Keywords = s.Keywords,
-                    Description = s.Description,
-                    SampleLearningGoals = s.SampleLearningGoals,
-                    Translations = s.Translations,
-                    Published = s.Published,
-                    RunnableResource = s.RunnableResource,
-                    CheerpJRunnable = s.CheerpJRunnable,
-                    Filename = s.Filename
-                })
-                .ToListAsync(ct);
+     .OrderBy(s => s.Title)
+     .Skip((page - 1) * pageSize)
+     .Take(pageSize)
+     .Select(s => new PhETSimulationDto
+     {
+         Id = s.Id,
+         Title = s.Title,
+         SimulationUrl = s.SimulationUrl,
+         ThumbnailUrl = s.ThumbnailUrl,
+         Topic = s.Topic,
+         Description = s.Description,
+         LearningGoals = s.LearningGoals,
+         GradeLevel = s.GradeLevel,
+         Standards = s.Standards,
+         Keywords = s.Keywords,
+         IsActive = s.IsActive,
+         DateCreated = s.DateCreated,
+         LastUpdated = s.LastUpdated,
+         Type = s.Type,
+         NumberOfScreens = s.NumberOfScreens,
+         ScreenNames = s.ScreenNames,
+         SimPage = s.SimPage,
+         SimString = s.SimString,
+         TeacherTipsDoc = s.TeacherTipsDoc,
+         PdfUrl = s.PdfUrl,
+         RunnableResource = s.RunnableResource,
+         CheerpJRunnable = s.CheerpJRunnable,
+         Filename = s.Filename,
+         Physics = s.Physics,
+         MathStatistics = s.MathStatistics,
+         Chemistry = s.Chemistry,
+         EarthSpace = s.EarthSpace,
+         Biology = s.Biology,
+         LowGradeLevel = s.LowGradeLevel,
+         HighGradeLevel = s.HighGradeLevel,
+         MainTopics = s.MainTopics,
+         SampleLearningGoals = s.SampleLearningGoals,
+         Translations = s.Translations,
+         Published = s.Published,
+         IsFree = s.IsFree
+     })
+     .ToListAsync(ct);
 
             return Ok(new PagedResult<PhETSimulationDto>(items, total, page, pageSize));
         }
-
 
         [HttpGet("simulations/{id:guid}")]
         [AllowAnonymous]
@@ -114,6 +123,17 @@ namespace BlueSandsLMS.Api.Controllers
                 {
                     Id = s.Id,
                     Title = s.Title,
+                    SimulationUrl = s.SimulationUrl,
+                    ThumbnailUrl = s.ThumbnailUrl,
+                    Topic = s.Topic,
+                    Description = s.Description,
+                    LearningGoals = s.LearningGoals,
+                    GradeLevel = s.GradeLevel,
+                    Standards = s.Standards,
+                    Keywords = s.Keywords,
+                    IsActive = s.IsActive,
+                    DateCreated = s.DateCreated,
+                    LastUpdated = s.LastUpdated,
                     Type = s.Type,
                     NumberOfScreens = s.NumberOfScreens,
                     ScreenNames = s.ScreenNames,
@@ -121,6 +141,9 @@ namespace BlueSandsLMS.Api.Controllers
                     SimString = s.SimString,
                     TeacherTipsDoc = s.TeacherTipsDoc,
                     PdfUrl = s.PdfUrl,
+                    RunnableResource = s.RunnableResource,
+                    CheerpJRunnable = s.CheerpJRunnable,
+                    Filename = s.Filename,
                     Physics = s.Physics,
                     MathStatistics = s.MathStatistics,
                     Chemistry = s.Chemistry,
@@ -129,14 +152,10 @@ namespace BlueSandsLMS.Api.Controllers
                     LowGradeLevel = s.LowGradeLevel,
                     HighGradeLevel = s.HighGradeLevel,
                     MainTopics = s.MainTopics,
-                    Keywords = s.Keywords,
-                    Description = s.Description,
                     SampleLearningGoals = s.SampleLearningGoals,
                     Translations = s.Translations,
                     Published = s.Published,
-                    RunnableResource = s.RunnableResource,
-                    CheerpJRunnable = s.CheerpJRunnable,
-                    Filename = s.Filename
+                    IsFree = s.IsFree
                 })
                 .FirstOrDefaultAsync(ct);
 
@@ -151,32 +170,31 @@ namespace BlueSandsLMS.Api.Controllers
         [AllowAnonymous]
         public async Task<ActionResult<object>> GetStatistics(CancellationToken ct)
         {
+            var subjectCounts = await _db.PhETSimulations
+                .Where(s => s.IsActive)
+                .GroupBy(s => 1)
+                .Select(g => new
+                {
+                    Total = g.Count(),
+                    Physics = g.Count(s => s.Physics),
+                    Chemistry = g.Count(s => s.Chemistry),
+                    Math = g.Count(s => s.MathStatistics),
+                    Biology = g.Count(s => s.Biology),
+                    EarthSpace = g.Count(s => s.EarthSpace)
+                })
+                .FirstOrDefaultAsync(ct);
+
             var stats = new
             {
-                TotalSimulations = await _db.PhETSimulations.Where(s => s.IsActive).CountAsync(ct),
+                TotalSimulations = subjectCounts?.Total ?? 0,
                 Subjects = new[]
                 {
-                    new {
-                        Name = "Physics",
-                        Count = await _db.PhETSimulations.Where(s => s.IsActive && s.Physics).CountAsync(ct)
-                    },
-                    new {
-                        Name = "Chemistry",
-                        Count = await _db.PhETSimulations.Where(s => s.IsActive && s.Chemistry).CountAsync(ct)
-                    },
-                    new {
-                        Name = "Math",
-                        Count = await _db.PhETSimulations.Where(s => s.IsActive && s.MathStatistics).CountAsync(ct)
-                    },
-                    new {
-                        Name = "Biology",
-                        Count = await _db.PhETSimulations.Where(s => s.IsActive && s.Biology).CountAsync(ct)
-                    },
-                    new {
-                        Name = "EarthSpace",
-                        Count = await _db.PhETSimulations.Where(s => s.IsActive && s.EarthSpace).CountAsync(ct)
-                    }
-                }
+            new { Name = "Physics", Count = subjectCounts?.Physics ?? 0 },
+            new { Name = "Chemistry", Count = subjectCounts?.Chemistry ?? 0 },
+            new { Name = "Math", Count = subjectCounts?.Math ?? 0 },
+            new { Name = "Biology", Count = subjectCounts?.Biology ?? 0 },
+            new { Name = "EarthSpace", Count = subjectCounts?.EarthSpace ?? 0 }
+        }
             };
 
             return Ok(stats);
@@ -190,8 +208,8 @@ namespace BlueSandsLMS.Api.Controllers
             CancellationToken ct = default)
         {
             var allTopics = await _db.PhETSimulations
-                .Where(s => s.IsActive && s.MainTopics != null)
-                .Select(s => s.MainTopics)
+                .Where(s => s.IsActive && s.Topic != null)
+                .Select(s => s.Topic)
                 .ToListAsync(ct);
 
             var topicCounts = new System.Collections.Generic.Dictionary<string, int>();

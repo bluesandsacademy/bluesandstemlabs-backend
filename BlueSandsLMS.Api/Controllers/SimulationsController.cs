@@ -46,7 +46,7 @@ namespace BlueSandsLMS.Api.Controllers
                     query = query.Where(x => x.Biology);
                 else if (normalized is "earthspace" or "earth-space" or "earth_space" or "earth & space")
                     query = query.Where(x => x.EarthSpace);
-                else if (normalized is "math" or "statistics" or "mathstatistics")
+                else if (normalized is "math" or "statistics" or "mathstatistics" or "mathematics")
                     query = query.Where(x => x.MathStatistics);
                 else
                     return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR", "Invalid subject filter.");
@@ -56,18 +56,17 @@ namespace BlueSandsLMS.Api.Controllers
             {
                 var g = grade.Trim().ToLowerInvariant();
                 query = query.Where(x =>
-                    (x.GradeLevel != null && x.GradeLevel.ToLower().Contains(g)) ||
-                    (x.LowGradeLevel != null && x.LowGradeLevel.ToLower() == g) ||
-                    (x.HighGradeLevel != null && x.HighGradeLevel.ToLower() == g));
+                  (x.GradeLevel != null && x.GradeLevel.ToLower().Contains(g)) ||
+                (x.LowGradeLevel != null && x.LowGradeLevel.ToLower() == g) ||
+                (x.HighGradeLevel != null && x.HighGradeLevel.ToLower() == g));
             }
-
             var items = await query
                 .OrderBy(x => x.Title)
                 .Select(x => new SimulationListItemDto
                 {
                     Id = x.Id,
                     Name = x.Title,
-                    PreviewUrl = x.ThumbnailUrl ?? x.SimPage ?? x.RunnableResource
+                    PreviewUrl = x.SimulationUrl
                 })
                 .ToListAsync(ct);
 

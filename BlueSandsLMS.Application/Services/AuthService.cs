@@ -247,7 +247,7 @@ namespace BlueSandsLMS.Application.Services
                 .FirstOrDefaultAsync(u => u.Email == dto.Email && u.IsActive);
 
             bool passwordValid;
-            try   { passwordValid = user != null && BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash); }
+            try { passwordValid = user != null && BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash); }
             catch { passwordValid = false; }
 
             if (user == null || !passwordValid)
@@ -437,18 +437,18 @@ namespace BlueSandsLMS.Application.Services
             _db.Users.Add(user);
 
 
-            var trialDays     = _config.GetValue<int>("Subscriptions:TrialDays", 14);
+            var trialDays = _config.GetValue<int>("Subscriptions:TrialDays", 14);
             var trialStudents = _config.GetValue<int>("Subscriptions:TrialStudentCount", 30);
-            var now           = DateTime.UtcNow;
+            var now = DateTime.UtcNow;
             _db.Subscriptions.Add(new Subscription
             {
-                SchoolId             = school.Id,
-                UserId               = null,
-                StudentsCovered      = trialStudents,
-                PricePerStudent      = 0m,
-                StartsAt             = now,
-                EndsAt               = now.AddDays(trialDays),
-                Active               = true,
+                SchoolId = school.Id,
+                UserId = null,
+                StudentsCovered = trialStudents,
+                PricePerStudent = 0m,
+                StartsAt = now,
+                EndsAt = now.AddDays(trialDays),
+                Active = true,
                 LastPaymentReference = "TRIAL"
             });
 
@@ -519,126 +519,126 @@ namespace BlueSandsLMS.Application.Services
 
 
 
-public async Task RequestPasswordResetAsync(string email, string? origin = null)
-{
-    email = email?.Trim()?.ToLowerInvariant() ?? "";
-    if (string.IsNullOrWhiteSpace(email))
-        throw new ArgumentException("Email is required");
+        public async Task RequestPasswordResetAsync(string email, string? origin = null)
+        {
+            email = email?.Trim()?.ToLowerInvariant() ?? "";
+            if (string.IsNullOrWhiteSpace(email))
+                throw new ArgumentException("Email is required");
 
-    var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
 
-    if (user == null)
-    {
-        await Task.Delay(TimeSpan.FromMilliseconds(new Random().Next(100, 300)));
-        return;
-    }
+            if (user == null)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(new Random().Next(100, 300)));
+                return;
+            }
 
-    var raw = RandomNumberGenerator.GetBytes(32);
-    var plainToken = Base64Url(raw);
-    var tokenHash = Sha256Hex(plainToken);
+            var raw = RandomNumberGenerator.GetBytes(32);
+            var plainToken = Base64Url(raw);
+            var tokenHash = Sha256Hex(plainToken);
 
-    var resetToken = new PasswordResetToken
-    {
-        Id = Guid.NewGuid(),
-        UserId = user.Id,
-        TokenHash = tokenHash,
-        CreatedAt = DateTime.UtcNow,
-        ExpiresAt = DateTime.UtcNow.AddHours(1),
-        IsUsed = false
-    };
+            var resetToken = new PasswordResetToken
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                TokenHash = tokenHash,
+                CreatedAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddHours(1),
+                IsUsed = false
+            };
 
-    _db.PasswordResetTokens.Add(resetToken);
-    await _db.SaveChangesAsync();
+            _db.PasswordResetTokens.Add(resetToken);
+            await _db.SaveChangesAsync();
 
-    var brand = SiteBrandResolver.Resolve(origin, _config);
-    var resetUrl = $"{brand.FrontendBaseUrl}/auth/reset-password?token={Uri.EscapeDataString(plainToken)}";
+            var brand = SiteBrandResolver.Resolve(origin, _config);
+            var resetUrl = $"{brand.FrontendBaseUrl}/auth/reset-password?token={Uri.EscapeDataString(plainToken)}";
 
-    var subject = $"🔐 Reset Your {brand.AppName} Password";
-    var html = EmailTemplates.BuildPasswordResetEmailHtml(
-        FirstNameOf(user.FullName), resetUrl, brand.SupportEmail, brand.SupportPhone, brand.AppName);
+            var subject = $"🔐 Reset Your {brand.AppName} Password";
+            var html = EmailTemplates.BuildPasswordResetEmailHtml(
+                FirstNameOf(user.FullName), resetUrl, brand.SupportEmail, brand.SupportPhone, brand.AppName);
 
-    await _email.SendAsync(user.Email, subject, html, brand.FromEmail, brand.FromDisplayName);
-}
+            await _email.SendAsync(user.Email, subject, html, brand.FromEmail, brand.FromDisplayName);
+        }
 
-public async Task ResetPasswordAsync(string token, string newPassword, string? origin = null)
-{
-    if (string.IsNullOrWhiteSpace(token))
-        throw new ArgumentException("Token is required");
+        public async Task ResetPasswordAsync(string token, string newPassword, string? origin = null)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+                throw new ArgumentException("Token is required");
 
-    if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 8)
-        throw new ArgumentException("Password must be at least 8 characters");
+            if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 8)
+                throw new ArgumentException("Password must be at least 8 characters");
 
-    var tokenHash = Sha256Hex(token);
+            var tokenHash = Sha256Hex(token);
 
-    var resetToken = await _db.PasswordResetTokens
-        .Include(t => t.User)
-        .FirstOrDefaultAsync(t => t.TokenHash == tokenHash);
+            var resetToken = await _db.PasswordResetTokens
+                .Include(t => t.User)
+                .FirstOrDefaultAsync(t => t.TokenHash == tokenHash);
 
-    if (resetToken == null)
-        throw new Exception("Invalid or expired reset link");
-    if (resetToken.IsUsed)
-        throw new Exception("This reset link has already been used");
-    if (resetToken.ExpiresAt < DateTime.UtcNow)
-        throw new Exception("This reset link has expired. Please request a new one.");
+            if (resetToken == null)
+                throw new Exception("Invalid or expired reset link");
+            if (resetToken.IsUsed)
+                throw new Exception("This reset link has already been used");
+            if (resetToken.ExpiresAt < DateTime.UtcNow)
+                throw new Exception("This reset link has expired. Please request a new one.");
 
-    resetToken.User.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
-    resetToken.IsUsed = true;
-    await _db.SaveChangesAsync();
+            resetToken.User.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+            resetToken.IsUsed = true;
+            await _db.SaveChangesAsync();
 
-    var brand = SiteBrandResolver.Resolve(origin, _config);
-    var loginUrl = $"{brand.FrontendBaseUrl}/login";
+            var brand = SiteBrandResolver.Resolve(origin, _config);
+            var loginUrl = $"{brand.FrontendBaseUrl}/login";
 
-    var subject = "✅ Your Password Has Been Changed";
-    var html = EmailTemplates.BuildPasswordChangedEmailHtml(
-        FirstNameOf(resetToken.User.FullName), loginUrl, brand.SupportEmail, brand.SupportPhone, brand.AppName);
+            var subject = "✅ Your Password Has Been Changed";
+            var html = EmailTemplates.BuildPasswordChangedEmailHtml(
+                FirstNameOf(resetToken.User.FullName), loginUrl, brand.SupportEmail, brand.SupportPhone, brand.AppName);
 
-    try
-    {
-        await _email.SendAsync(resetToken.User.Email, subject, html, brand.FromEmail, brand.FromDisplayName);
-    }
-    catch (Exception ex)
-    {
-        _logger.LogWarning(ex, "Password reset confirmation email failed for {Email}; password reset still succeeded", resetToken.User.Email);
-    }
-}
+            try
+            {
+                await _email.SendAsync(resetToken.User.Email, subject, html, brand.FromEmail, brand.FromDisplayName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Password reset confirmation email failed for {Email}; password reset still succeeded", resetToken.User.Email);
+            }
+        }
 
-public async Task ChangePasswordAsync(Guid userId, string currentPassword, string newPassword, string? origin = null)
-{
-    if (string.IsNullOrWhiteSpace(currentPassword))
-        throw new ArgumentException("Current password is required");
+        public async Task ChangePasswordAsync(Guid userId, string currentPassword, string newPassword, string? origin = null)
+        {
+            if (string.IsNullOrWhiteSpace(currentPassword))
+                throw new ArgumentException("Current password is required");
 
-    if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 8)
-        throw new ArgumentException("New password must be at least 8 characters");
+            if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 8)
+                throw new ArgumentException("New password must be at least 8 characters");
 
-    if (currentPassword == newPassword)
-        throw new ArgumentException("New password must be different from current password");
+            if (currentPassword == newPassword)
+                throw new ArgumentException("New password must be different from current password");
 
-    var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId);
-    if (user == null)
-        throw new Exception("User not found");
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+                throw new Exception("User not found");
 
-    if (!BCrypt.Net.BCrypt.Verify(currentPassword, user.PasswordHash))
-        throw new Exception("Current password is incorrect");
+            if (!BCrypt.Net.BCrypt.Verify(currentPassword, user.PasswordHash))
+                throw new Exception("Current password is incorrect");
 
-    user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
-    await _db.SaveChangesAsync();
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+            await _db.SaveChangesAsync();
 
-    var brand = SiteBrandResolver.Resolve(origin, _config);
-    var loginUrl = $"{brand.FrontendBaseUrl}/login";
+            var brand = SiteBrandResolver.Resolve(origin, _config);
+            var loginUrl = $"{brand.FrontendBaseUrl}/login";
 
-    var subject = "✅ Your Password Has Been Changed";
-    var html = EmailTemplates.BuildPasswordChangedEmailHtml(
-        FirstNameOf(user.FullName), loginUrl, brand.SupportEmail, brand.SupportPhone, brand.AppName);
+            var subject = "✅ Your Password Has Been Changed";
+            var html = EmailTemplates.BuildPasswordChangedEmailHtml(
+                FirstNameOf(user.FullName), loginUrl, brand.SupportEmail, brand.SupportPhone, brand.AppName);
 
-    try
-    {
-        await _email.SendAsync(user.Email, subject, html, brand.FromEmail, brand.FromDisplayName);
-    }
-    catch (Exception ex)
-    {
-        _logger.LogWarning(ex, "Password change confirmation email failed for {Email}; password change still succeeded", user.Email);
-    }
-}
+            try
+            {
+                await _email.SendAsync(user.Email, subject, html, brand.FromEmail, brand.FromDisplayName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Password change confirmation email failed for {Email}; password change still succeeded", user.Email);
+            }
+        }
         public async Task ResendVerificationAsync(string email, string? origin = null)
         {
             var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
@@ -808,19 +808,19 @@ public async Task ChangePasswordAsync(Guid userId, string currentPassword, strin
 
             var user = new User
             {
-                Id              = Guid.NewGuid(),
-                FullName        = string.IsNullOrWhiteSpace(tokenInfo.Name) ? tokenInfo.Email : tokenInfo.Name,
-                Email           = tokenInfo.Email,
+                Id = Guid.NewGuid(),
+                FullName = string.IsNullOrWhiteSpace(tokenInfo.Name) ? tokenInfo.Email : tokenInfo.Name,
+                Email = tokenInfo.Email,
 
-                PasswordHash    = BCrypt.Net.BCrypt.HashPassword(Guid.NewGuid().ToString()),
-                RoleId          = studentRole.Id,
-                IsActive        = true,
-                DateCreated     = DateTime.UtcNow,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(Guid.NewGuid().ToString()),
+                RoleId = studentRole.Id,
+                IsActive = true,
+                DateCreated = DateTime.UtcNow,
                 IsEmailVerified = true,
                 EmailVerifiedAt = DateTime.UtcNow,
-                Phone           = phone ?? string.Empty,
-                Country         = country ?? string.Empty,
-                GoogleSubject   = tokenInfo.GoogleSub
+                Phone = phone ?? string.Empty,
+                Country = country ?? string.Empty,
+                GoogleSubject = tokenInfo.GoogleSub
             };
 
             _db.Users.Add(user);
@@ -829,14 +829,14 @@ public async Task ChangePasswordAsync(Guid userId, string currentPassword, strin
 
             try
             {
-                var brand    = SiteBrandResolver.Resolve(origin, _config);
+                var brand = SiteBrandResolver.Resolve(origin, _config);
                 var loginUrl = $"{brand.FrontendBaseUrl}/login";
-                var subject  = $"🎉 Welcome to {brand.AppName} – The Future of Learning Awaits!";
-                var html     = EmailTemplates.BuildWelcomeEmailHtml(
-                    appName:      brand.AppName,
-                    role:         "Student",
-                    firstName:    FirstNameOf(user.FullName),
-                    verifyLink:   loginUrl,
+                var subject = $"🎉 Welcome to {brand.AppName} – The Future of Learning Awaits!";
+                var html = EmailTemplates.BuildWelcomeEmailHtml(
+                    appName: brand.AppName,
+                    role: "Student",
+                    firstName: FirstNameOf(user.FullName),
+                    verifyLink: loginUrl,
                     supportEmail: brand.SupportEmail,
                     supportPhone: brand.SupportPhone
                 );
@@ -848,147 +848,224 @@ public async Task ChangePasswordAsync(Guid userId, string currentPassword, strin
             }
 
             var couponResult = await TryApplyCouponAsync(couponCode);
-            var res          = await GenerateAuthResponse(user);
+            var res = await GenerateAuthResponse(user);
             res.PromoApplied = couponResult.applied;
             res.PromoMessage = couponResult.message;
             return res;
         }
 
 
-private async Task<AuthResponseDto> GenerateAuthResponse(User user, TimeSpan? tokenTtl = null)
-{
-    var secret = GetJwtSecret();
-    var issuer = _config["Jwt:Issuer"] ?? string.Empty;
-    var audience = _config["Jwt:Audience"] ?? string.Empty;
-    var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
+        private async Task<AuthResponseDto> GenerateAuthResponse(User user, TimeSpan? tokenTtl = null)
+        {
+            var secret = GetJwtSecret();
+            var issuer = _config["Jwt:Issuer"] ?? string.Empty;
+            var audience = _config["Jwt:Audience"] ?? string.Empty;
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
 
-    var roleName = user.Role?.Name
-        ?? await _db.Roles.Where(r => r.Id == user.RoleId)
-                           .Select(r => r.Name)
-                           .FirstOrDefaultAsync()
-        ?? string.Empty;
+            var roleName = user.Role?.Name
+                ?? await _db.Roles.Where(r => r.Id == user.RoleId)
+                                   .Select(r => r.Name)
+                                   .FirstOrDefaultAsync()
+                ?? string.Empty;
 
-    var claims = new List<Claim>
+            var claims = new List<Claim>
     {
         new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
         new Claim("FullName", user.FullName ?? string.Empty),
-        new Claim("role", roleName)
+        new Claim("role", roleName),
+        new Claim("email", user.Email ?? string.Empty)
     };
 
-    if (user.SchoolId.HasValue && user.SchoolId.Value != Guid.Empty)
-        claims.Add(new Claim("SchoolId", user.SchoolId.Value.ToString()));
+            if (user.SchoolId.HasValue && user.SchoolId.Value != Guid.Empty)
+                claims.Add(new Claim("SchoolId", user.SchoolId.Value.ToString()));
 
-    var minutes = _config.GetValue<int?>("Jwt:AccessTokenMinutes") ?? 120;
-    var accessTtl = tokenTtl ?? TimeSpan.FromMinutes(minutes);
-    var accessExpiresAt = DateTime.UtcNow.Add(accessTtl);
+            var minutes = _config.GetValue<int?>("Jwt:AccessTokenMinutes") ?? 120;
+            var accessTtl = tokenTtl ?? TimeSpan.FromMinutes(minutes);
+            var accessExpiresAt = DateTime.UtcNow.Add(accessTtl);
 
-    var tokenDescriptor = new SecurityTokenDescriptor
-    {
-        Subject = new ClaimsIdentity(claims),
-        Issuer = issuer,
-        Audience = audience,
-        Expires = accessExpiresAt,
-        SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256)
-    };
-
-    var handler = new JwtSecurityTokenHandler();
-    var securityToken = handler.CreateToken(tokenDescriptor);
-    var tokenString = handler.WriteToken(securityToken);
-    var refreshDays = _config.GetValue<int?>("Jwt:RefreshTokenDays") ?? 14;
-    var refreshExpiresAt = DateTime.UtcNow.AddDays(refreshDays);
-    var refreshToken = BuildRefreshToken(user, roleName, refreshExpiresAt);
-
-
-    string? schoolName = null;
-    string schoolCurrency = "NGN";
-    if (user.SchoolId.HasValue && user.SchoolId.Value != Guid.Empty)
-    {
-        var school = await _db.Schools
-            .Where(s => s.Id == user.SchoolId.Value)
-            .Select(s => new { s.Name, s.Currency })
-            .FirstOrDefaultAsync();
-        schoolName = school?.Name;
-        schoolCurrency = school?.Currency ?? "NGN";
-    }
-
-    var response = new AuthResponseDto
-    {
-        Token = tokenString,
-        AccessTokenExpiresAt = accessExpiresAt,
-        RefreshToken = refreshToken,
-        RefreshTokenExpiresAt = refreshExpiresAt,
-        FullName = user.FullName ?? string.Empty,
-        Role = roleName,
-        UserId = user.Id,
-        SchoolId = user.SchoolId,
-        SchoolName = schoolName,
-        SchoolCurrency = schoolCurrency,
-        Email = user.Email ?? string.Empty,
-        IsVerified = user.IsEmailVerified,
-        Phone = user.Phone ?? string.Empty,
-        Country = user.Country ?? string.Empty
-    };
-
-
-    var schoolId = user.SchoolId ?? Guid.Empty;
-    
-    Subscription? subscription = null;
-    
-    if (schoolId != Guid.Empty)
-    {
-
-        subscription = await _db.Subscriptions
-            .Where(s => s.SchoolId == schoolId && s.Active)
-            .OrderByDescending(s => s.EndsAt)
-            .FirstOrDefaultAsync();
-    }
-    else
-    {
-
-        subscription = await _db.Subscriptions
-            .Where(s => s.UserId == user.Id && s.Active)
-            .OrderByDescending(s => s.EndsAt)
-            .FirstOrDefaultAsync();
-    }
-
-    if (subscription != null)
-    {
-        var end = subscription.EndsAt;
-        var daysRemaining = Math.Max(0, (int)Math.Floor((end - DateTime.UtcNow).TotalDays));
-
-        response.Subscription = new SubscriptionSummaryDto
-        {
-            Active = subscription.Active,
-            StartsAt = subscription.StartsAt,
-            EndsAt = subscription.EndsAt,
-            StudentsCovered = subscription.StudentsCovered,
-            PricePerStudent = subscription.PricePerStudent,
-            LastPaymentReference = subscription.LastPaymentReference,
-            DaysRemaining = daysRemaining
-        };
-
-
-        var students = subscription.StudentsCovered;
-
-        var tier = await _db.PricingTiers
-            .OrderBy(t => t.MinStudents)
-            .FirstOrDefaultAsync(t => students >= t.MinStudents && students <= t.MaxStudents);
-
-        if (tier != null)
-        {
-            response.CurrentTier = new TierSummaryDto
+            var tokenDescriptor = new SecurityTokenDescriptor
             {
-                Id = tier.Id,
-                TierName = tier.TierName,
-                MinStudents = tier.MinStudents,
-                MaxStudents = tier.MaxStudents,
-                PricePerStudent = tier.PricePerStudent,
-                IsMatch = true
+                Subject = new ClaimsIdentity(claims),
+                Issuer = issuer,
+                Audience = audience,
+                Expires = accessExpiresAt,
+                SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256)
             };
-        }
-    }
 
-    return response;
-}
+            var handler = new JwtSecurityTokenHandler();
+            var securityToken = handler.CreateToken(tokenDescriptor);
+            var tokenString = handler.WriteToken(securityToken);
+            var refreshDays = _config.GetValue<int?>("Jwt:RefreshTokenDays") ?? 14;
+            var refreshExpiresAt = DateTime.UtcNow.AddDays(refreshDays);
+            var refreshToken = BuildRefreshToken(user, roleName, refreshExpiresAt);
+
+
+            string? schoolName = null;
+            string schoolCurrency = "NGN";
+            if (user.SchoolId.HasValue && user.SchoolId.Value != Guid.Empty)
+            {
+                var school = await _db.Schools
+                    .Where(s => s.Id == user.SchoolId.Value)
+                    .Select(s => new { s.Name, s.Currency })
+                    .FirstOrDefaultAsync();
+                schoolName = school?.Name;
+                schoolCurrency = school?.Currency ?? "NGN";
+            }
+
+            var response = new AuthResponseDto
+            {
+                Token = tokenString,
+                AccessTokenExpiresAt = accessExpiresAt,
+                RefreshToken = refreshToken,
+                RefreshTokenExpiresAt = refreshExpiresAt,
+                FullName = user.FullName ?? string.Empty,
+                Role = roleName,
+                UserId = user.Id,
+                SchoolId = user.SchoolId,
+                SchoolName = schoolName,
+                SchoolCurrency = schoolCurrency,
+                Email = user.Email ?? string.Empty,
+                IsVerified = user.IsEmailVerified,
+                Phone = user.Phone ?? string.Empty,
+                Country = user.Country ?? string.Empty,
+            };
+
+
+            var schoolId = user.SchoolId ?? Guid.Empty;
+
+            Subscription? subscription = null;
+
+            if (schoolId != Guid.Empty)
+            {
+
+                subscription = await _db.Subscriptions
+                    .Where(s => s.SchoolId == schoolId && s.Active)
+                    .OrderByDescending(s => s.EndsAt)
+                    .FirstOrDefaultAsync();
+            }
+            else
+            {
+
+                subscription = await _db.Subscriptions
+                    .Where(s => s.UserId == user.Id && s.Active)
+                    .OrderByDescending(s => s.EndsAt)
+                    .FirstOrDefaultAsync();
+            }
+
+            if (subscription != null)
+            {
+                var end = subscription.EndsAt;
+                var daysRemaining = Math.Max(0, (int)Math.Floor((end - DateTime.UtcNow).TotalDays));
+
+                response.Subscription = new SubscriptionSummaryDto
+                {
+                    Active = subscription.Active,
+                    StartsAt = subscription.StartsAt,
+                    EndsAt = subscription.EndsAt,
+                    StudentsCovered = subscription.StudentsCovered,
+                    PricePerStudent = subscription.PricePerStudent,
+                    LastPaymentReference = subscription.LastPaymentReference,
+                    DaysRemaining = daysRemaining
+                };
+
+
+                var students = subscription.StudentsCovered;
+
+                var tier = await _db.PricingTiers
+                    .OrderBy(t => t.MinStudents)
+                    .FirstOrDefaultAsync(t => students >= t.MinStudents && students <= t.MaxStudents);
+
+                if (tier != null)
+                {
+                    response.CurrentTier = new TierSummaryDto
+                    {
+                        Id = tier.Id,
+                        TierName = tier.TierName,
+                        MinStudents = tier.MinStudents,
+                        MaxStudents = tier.MaxStudents,
+                        PricePerStudent = tier.PricePerStudent,
+                        IsMatch = true
+                    };
+                }
+            }
+
+            return response;
+        }
+
+   
+      public async Task<AuthResponseDto> RegisterUserAsAsync(RegisterUserAsDto dto, string? origin = null)
+        {
+            var email = NormalizeEmail(dto.Email);
+            await EnsureEmailAvailableAsync(email);
+
+            if (string.IsNullOrWhiteSpace(dto.RoleName))
+                throw new ArgumentException("RoleName is required.");
+
+            // Normalize role aliases
+            var roleName = dto.RoleName.Trim();
+            if (string.Equals(roleName, "Admin", StringComparison.OrdinalIgnoreCase))
+                roleName = "GlobalAdmin";
+
+            // Resolve role
+            var role = await _db.Roles.FirstOrDefaultAsync(r => r.Name == roleName);
+            if (role == null)
+                throw new Exception($"Role '{roleName}' not found.");
+
+            // SchoolAdmin must have a SchoolId
+            if (string.Equals(role.Name, "SchoolAdmin", StringComparison.OrdinalIgnoreCase) && dto.SchoolId == Guid.Empty)
+                throw new ArgumentException("SchoolId is required when creating a SchoolAdmin.");
+
+            var user = new User
+            {
+                Id = Guid.NewGuid(),
+                FullName = dto.FullName,
+                Email = email,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
+                RoleId = role.Id,
+                SchoolId = dto.SchoolId == Guid.Empty ? null : dto.SchoolId,
+                IsActive = true,
+                DateCreated = DateTime.UtcNow,
+                Phone = dto.Phone ?? string.Empty,
+                Country = dto.Country ?? string.Empty
+            };
+
+            _db.Users.Add(user);
+            await _db.SaveChangesAsync();
+
+            var couponResult = await TryApplyCouponAsync(dto.CouponCode);
+
+            try
+            {
+                var (plainToken, _) = await CreateEmailVerifyTokenAsync(user, TimeSpan.FromDays(3));
+
+                var brand = SiteBrandResolver.Resolve(origin, _config);
+                var apiBase = _config["App:BaseUrl"]?.TrimEnd('/') ?? "http://localhost:5245";
+                var verifyUrl = $"{apiBase}/api/auth/verify-email?token={Uri.EscapeDataString(plainToken)}&site={brand.SiteKey}";
+
+                var subject = $"🎉 Welcome to {brand.AppName} – The Future of Learning Awaits!";
+                var html = EmailTemplates.BuildWelcomeEmailHtml(
+                    appName: brand.AppName,
+                    role: role.Name,
+                    firstName: FirstNameOf(user.FullName),
+                    verifyLink: verifyUrl,
+                    supportEmail: brand.SupportEmail,
+                    supportPhone: brand.SupportPhone
+                );
+
+                await _email.SendAsync(user.Email, subject, html, brand.FromEmail, brand.FromDisplayName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Welcome email failed for created user {Email}; user creation still succeeded", user.Email);
+            }
+
+            var res = await GenerateAuthResponse(user);
+            res.PromoApplied = couponResult.applied;
+            res.PromoMessage = couponResult.message;
+            return res;
+        }
+
+       
+        
     }
 }

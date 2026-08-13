@@ -40,7 +40,7 @@ namespace BlueSandsLMS.Application.Services
                 
                 var simulations = await _db.PhETSimulations
                     .Where(s => s.IsActive)
-                    .Select(s => new { s.Id, s.Title, s.Topic })
+                  .Select(s => new { s.Id, s.Title, s.Topic })
                     .ToListAsync(ct);
                 
                 if (!simulations.Any())

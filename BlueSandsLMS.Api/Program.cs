@@ -30,6 +30,7 @@ using System.ComponentModel;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using CurrentUser = BlueSandsLMS.Application.Services.CurrentUser;
 using ISchoolAdminAnalytics = BlueSandsLMS.Common.Interfaces.Dashboard.ISchoolAdminService;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
@@ -113,7 +114,7 @@ builder.Services.AddAuthorization(options =>
 
 // Register HttpContextAccessor and CurrentUser wrapper
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<BlueSandsLMS.Api.Services.ICurrentUser, BlueSandsLMS.Api.Services.CurrentUser>();
+builder.Services.AddScoped<BlueSandsLMS.Application.Services.ICurrentUser, BlueSandsLMS.Application.Services.CurrentUser>();
 
 // Resolve JWT secret — support "REPLACE_WITH_ENV_VAR: <ENVNAME>" placeholder used in appsettings
 string ResolveJwtSecret(string configured)
