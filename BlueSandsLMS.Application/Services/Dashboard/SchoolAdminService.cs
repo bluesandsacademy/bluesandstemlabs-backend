@@ -401,14 +401,14 @@ namespace BlueSandsLMS.Application.Services.Dashboard
 
 
 
-        public async Task<UpsertResultDto> UpsertTeacherAsync(Guid adminUserId, Guid schoolId, UpsertTeacherDto dto)
-            => await UpsertUserForSchoolAsync(schoolId, dto.Email, dto.FullName, dto.Phone, dto.Country, "Teacher", CancellationToken.None);
+        public async Task<UpsertResultDto> UpsertTeacherAsync(UpsertTeacherDto dto)
+            => await RegisterOrAssignUserToSchoolAsync( dto.Gender, dto.FullName, dto.Phone, dto.Country, CancellationToken.None);
 
         public async Task<IReadOnlyList<UpsertResultDto>> BulkUpsertTeachersAsync(Guid adminUserId, Guid schoolId, BulkUpsertTeachersDto dto)
         {
             var results = new List<UpsertResultDto>();
-            foreach (var t in dto.Teachers.DistinctBy(x => x.Email.Trim().ToLowerInvariant()))
-                results.Add(await UpsertTeacherAsync(adminUserId, schoolId, t));
+            foreach (var t in dto.Teachers.DistinctBy(x => x.FullName.Trim().ToLowerInvariant()))
+                results.Add(await UpsertTeacherAsync(t));
             _cacheBust.InvalidateSchoolAdmin(schoolId);
             return results;
         }
@@ -686,6 +686,109 @@ var newUser = new Core.Entities.User
             await _db.SaveChangesAsync();
             _cacheBust.InvalidateSchoolAdmin(schoolId);
             return new UpsertResultDto(studentEmail, "updated", user.Id, "Student", schoolId);
+        }
+
+
+
+        private async Task<UpsertResultDto> RegisterOrAssignUserToSchoolAsync(
+            string Gender, string fullName, string? phone, string? country, CancellationToken ct)
+        {
+            var email = _currentUser.Email;
+            var teacherEmail = EmailGenerator.GenerateEmailFromFullName(fullName);
+            var schoolId = _currentUser.SchoolId ?? throw new InvalidOperationException("Current user does not belong to a school."); ;
+
+
+            if (string.IsNullOrWhiteSpace(email))
+                throw new InvalidOperationException("Current user email is not available.");
+            email = email.Trim().ToLowerInvariant();
+
+            var user = await _db.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.Email == teacherEmail, ct);
+            
+
+            var targetRole = await _db.Roles.FirstOrDefaultAsync(r => r.Name == "Teacher", ct)
+                             ?? throw new Exception($"Role 'Teacher' not found.");
+
+            string roleName = targetRole.Name;
+
+            if (user == null)
+            {
+                var plainPassword = GenerateSecurePassword(12);
+                var newUser = new Core.Entities.User
+                {
+                    Id = Guid.NewGuid(),
+                    Email = teacherEmail,
+                    FullName = fullName,
+                    Phone = phone ?? string.Empty,
+                    Country = country ?? string.Empty,
+                    RoleId = targetRole.Id,
+                    SchoolId = schoolId,
+                    DateCreated = DateTime.UtcNow,
+                    IsActive = true,
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(plainPassword),
+                    IsEmailVerified = false
+                };
+
+                _db.Users.Add(newUser);
+                await _db.SaveChangesAsync(ct);
+                _cacheBust.InvalidateSchoolAdmin(schoolId);
+
+                try
+                {
+                    var adminEmail = _currentUser.Email;
+                    if (!string.IsNullOrWhiteSpace(adminEmail))
+                    {
+                        var brand = SiteBrandResolver.Resolve(null, _config);
+                        var loginUrl = $"{brand.FrontendBaseUrl}/login";
+
+                        var subject = $"🎉 Welcome to {brand.AppName} – The Future of Learning Awaits!";
+                        var firstName = !string.IsNullOrWhiteSpace(fullName)
+                            ? fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0]
+                            : "there";
+
+                        var html = EmailTemplates.BuildWelcomeEmailHtml(
+                            role: targetRole.ToString(),
+                            firstName: firstName,
+                            verifyLink: loginUrl,
+                            supportEmail: brand.SupportEmail,
+                            supportPhone: brand.SupportPhone,
+                            appName: brand.AppName
+                        );
+
+                       // await _email.SendAsync(adminEmail, subject, html, brand.FromEmail, brand.FromDisplayName);
+
+                        var credSubject = $"New {roleName} account created for {brand.AppName}";
+                        var credHtml = $@"<!doctype html><html><body style=""font-family:Arial,Helvetica,sans-serif;color:#111;line-height:1.6"">
+                    <p>Dear School Admin,</p>
+
+                    <p>A new {WebUtility.HtmlEncode(roleName)} account was created for your school on <strong>{WebUtility.HtmlEncode(brand.AppName)}</strong>.</p>
+
+                    <p><strong>{WebUtility.HtmlEncode(roleName)}</strong>: {WebUtility.HtmlEncode(fullName)}<br/>
+                    <strong>Email (username)</strong>: {WebUtility.HtmlEncode(teacherEmail)}<br/>
+                    <strong>Temporary password</strong>: <strong>{WebUtility.HtmlEncode(plainPassword)}</strong>
+                    </p>
+
+                    <p>Please provide these credentials to the user. They should sign in at <a href=""{loginUrl}"">{WebUtility.HtmlEncode(loginUrl)}</a> and change the password on first login.</p>
+
+                    <p>If you have any trouble, contact support at <a href=""mailto:{WebUtility.HtmlEncode(brand.SupportEmail)}"">{WebUtility.HtmlEncode(brand.SupportEmail)}</a>.</p>
+
+                    <p>Kind regards,<br/>{WebUtility.HtmlEncode(brand.AppName)} Team</p>
+                    </body></html>";
+
+                        await _email.SendAsync(adminEmail, credSubject, credHtml, brand.FromEmail, brand.FromDisplayName);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to send new-user credentials to current admin user");
+                }
+
+                return new UpsertResultDto(teacherEmail, "created", newUser.Id, roleName, schoolId);
+            }
+            else
+            {
+                throw new Exception($"User '{email}' already exists. Please use a different email or update the existing user.");
+            }
+
         }
 
         // --- helpers ---

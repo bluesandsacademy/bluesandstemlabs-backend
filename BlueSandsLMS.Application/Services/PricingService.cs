@@ -22,17 +22,17 @@ namespace BlueSandsLMS.Application.Services
 
             if (!string.IsNullOrWhiteSpace(promoCode))
             {
-                var code = await _db.PromoCodes
-                    .FirstOrDefaultAsync(p => p.Code == promoCode.Trim());
+                //var code = await _db.PromoCodes
+                //    .FirstOrDefaultAsync(p => p.Code == promoCode.Trim());
 
-                if (code == null)
-                    throw new InvalidOperationException($"Promo code '{promoCode}' is not valid.");
-                if (!code.IsActive)
-                    throw new InvalidOperationException($"Promo code '{promoCode}' is no longer active.");
-                if (code.ExpiresAt.HasValue && code.ExpiresAt.Value < asOf)
-                    throw new InvalidOperationException($"Promo code '{promoCode}' has expired.");
-                if (code.MaxRedemptions.HasValue && code.RedemptionCount >= code.MaxRedemptions.Value)
-                    throw new InvalidOperationException($"Promo code '{promoCode}' has reached its redemption limit.");
+                //if (code == null)
+                //    throw new InvalidOperationException($"Promo code '{promoCode}' is not valid.");
+                //if (!code.IsActive)
+                //    throw new InvalidOperationException($"Promo code '{promoCode}' is no longer active.");
+                //if (code.ExpiresAt.HasValue && code.ExpiresAt.Value < asOf)
+                //    throw new InvalidOperationException($"Promo code '{promoCode}' has expired.");
+                //if (code.MaxRedemptions.HasValue && code.RedemptionCount >= code.MaxRedemptions.Value)
+                //    throw new InvalidOperationException($"Promo code '{promoCode}' has reached its redemption limit.");
 
 
                 var pricingPromo = await _db.PricingPromos

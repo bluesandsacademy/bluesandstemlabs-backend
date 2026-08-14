@@ -113,7 +113,7 @@ namespace BlueSandsLMS.Api.Controllers
         [HttpPost("api/school-admin/teachers")]
         [Authorize(Roles = "SchoolAdmin")]
         public async Task<IActionResult> CreateTeacher([FromBody] UpsertTeacherDto dto, CancellationToken ct)
-            => Ok(await _schoolOps.UpsertTeacherAsync(CurrentUserId(), await CurrentSchoolIdAsync(ct), dto));
+            => Ok(await _schoolOps.UpsertTeacherAsync( dto));
 
         [HttpGet("api/school-admin/teachers")]
         [Authorize(Roles = "SchoolAdmin")]
