@@ -8,5 +8,7 @@ namespace BlueSandsLMS.Common.Interfaces
         Task<TeacherDashboardDto> GetTeacherAsync(Guid teacherId);
         Task<SchoolAdminDashboardDto> GetSchoolAdminAsync(Guid adminUserId, Guid schoolId);
         Task<GlobalDashboardDto> GetGlobalAsync();
+        Task<GrowthChartResponse> GetUsersGrowthAsync();
+        Task<GrowthChartResponse> GetRevenueGrowthAsync();
     }
 }

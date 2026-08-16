@@ -40,9 +40,9 @@ namespace BlueSandsLMS.Api.Controllers
         public async Task<SchoolOverviewDto> Overview(CancellationToken ct)
             => await _svc.GetOverviewAsync(await RequireSchoolIdAsync(ct), ct);
 
-        [HttpGet("trends")]
-        public async Task<TrendsDto> Trends([FromQuery] int days = 30, CancellationToken ct = default)
-            => await _svc.GetTrendsAsync(await RequireSchoolIdAsync(ct), days, ct);
+        //[HttpGet("trends")]
+        //public async Task<TrendsDto> Trends([FromQuery] int days = 30, CancellationToken ct = default)
+        //    => await _svc.GetTrendsAsync(await RequireSchoolIdAsync(ct), days, ct);
 
         [HttpGet("performance")]
         public async Task<PerformanceDto> Performance([FromQuery] DateOnly? since, [FromQuery] DateOnly? until, CancellationToken ct = default)

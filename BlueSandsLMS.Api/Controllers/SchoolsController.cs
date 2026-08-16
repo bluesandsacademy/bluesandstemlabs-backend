@@ -31,18 +31,18 @@ namespace BlueSandsLMS.Api.Controllers
             return Ok(result);
         }
         [HttpPut("{id}")]
-public async Task<IActionResult> Update(Guid id, [FromBody] UpdateSchoolDto dto)
-{
-    var result = await _schoolService.UpdateAsync(id, dto);
-    return Ok(result);
-}
+        public async Task<IActionResult> Update(Guid id, [FromBody] UpdateSchoolDto dto)
+        {
+            var result = await _schoolService.UpdateAsync(id, dto);
+            return Ok(result);
+        }
 
-[HttpDelete("{id}")]
-public async Task<IActionResult> Delete(Guid id)
-{
-    await _schoolService.DeleteAsync(id);
-    return NoContent();
-}
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(Guid id)
+        {
+            await _schoolService.DeleteAsync(id);
+            return NoContent();
+        }
 
     }
 }

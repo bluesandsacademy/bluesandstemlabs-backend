@@ -57,17 +57,17 @@ namespace BlueSandsLMS.Application.Services
 
         public async Task<InitPaymentResponse> InitializeAsync(InitPaymentRequest req, ClaimsPrincipal? user)
         {
-            if (_cfg.GetValue<bool>("Testing:AllowFakePaystackInit"))
-            {
-                if (req.Students < 1) throw new ArgumentException("Students must be >= 1.");
-                if (string.IsNullOrWhiteSpace(req.ContactEmail)) throw new ArgumentException("ContactEmail is required.");
+            //if (_cfg.GetValue<bool>("Testing:AllowFakePaystackInit"))
+            //{
+            //    if (req.Students < 1) throw new ArgumentException("Students must be >= 1.");
+            //    if (string.IsNullOrWhiteSpace(req.ContactEmail)) throw new ArgumentException("ContactEmail is required.");
 
-                var fakeReference = $"BS-TEST-{Guid.NewGuid():N}";
-                return new InitPaymentResponse(
-                    $"https://paystack.test/checkout/{fakeReference}",
-                    "test_access_code",
-                    fakeReference);
-            }
+            //    var fakeReference = $"BS-TEST-{Guid.NewGuid():N}";
+            //    return new InitPaymentResponse(
+            //        $"https://paystack.test/checkout/{fakeReference}",
+            //        "test_access_code",
+            //        fakeReference);
+            //}
 
             if (string.IsNullOrWhiteSpace(_paystackSecretKey))
                 throw new InvalidOperationException(

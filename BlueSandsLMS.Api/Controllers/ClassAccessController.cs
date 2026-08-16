@@ -1,4 +1,5 @@
 using BlueSandsLMS.Api.Services;
+using BlueSandsLMS.Application.Services;
 using BlueSandsLMS.Common.DTOs;
 using BlueSandsLMS.Common.Interfaces;
 using Microsoft.AspNetCore.Authorization;

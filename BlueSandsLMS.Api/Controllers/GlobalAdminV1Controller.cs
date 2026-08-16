@@ -23,5 +23,15 @@ namespace BlueSandsLMS.Api.Controllers
         [HttpGet("geo-usage")]
         public async Task<ActionResult<GeoUsageDto>> GeoUsage(CancellationToken ct)
             => Ok(await _svc.GetGeoUsageAsync(ct));
+
+        [HttpGet("schools")]
+        public async Task<ActionResult<PagedResult<SchoolDetailDto>>> Schools(
+            [FromQuery] string? q = null,
+            [FromQuery] string? country = null,
+            [FromQuery] bool? isActive = null,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20,
+            CancellationToken ct = default)
+            => Ok(await _svc.GetSchoolsAsync(new SchoolQuery(q, country, isActive, page, pageSize), ct));
     }
 }

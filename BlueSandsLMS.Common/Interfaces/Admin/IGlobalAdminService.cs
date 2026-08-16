@@ -30,5 +30,7 @@ namespace BlueSandsLMS.Common.Interfaces.Admin
 
         Task<SupportOverviewDto> GetSupportOverviewAsync(CancellationToken ct = default);
         Task<PagedResult<SupportMessageDto>> GetSupportMessagesAsync(int page, int pageSize, CancellationToken ct = default);
+
+        Task<PagedResult<SchoolDetailDto>> GetSchoolsAsync(SchoolQuery query, CancellationToken ct = default);
     }
 }

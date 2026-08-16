@@ -1,7 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using BlueSandsLMS.Common.Teacher;
+using BlueSandsLMS.Common.DTOs.Teacher;
 
 namespace BlueSandsLMS.Common.Interfaces.Teacher
 {

@@ -3,8 +3,8 @@ using System;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
+using BlueSandsLMS.Common.DTOs.Teacher;
 using BlueSandsLMS.Common.Interfaces.Teacher;
-using BlueSandsLMS.Common.Teacher;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

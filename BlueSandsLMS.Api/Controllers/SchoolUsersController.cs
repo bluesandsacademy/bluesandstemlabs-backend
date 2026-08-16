@@ -61,23 +61,80 @@ namespace BlueSandsLMS.Api.Controllers
 
 
         [HttpGet("students")]
-        public async Task<IActionResult> ListStudents([FromQuery] Guid? schoolId, CancellationToken ct)
+        public async Task<IActionResult> ListStudents(
+            [FromQuery] Guid? schoolId,
+            [FromQuery] int pageNumber = 1,
+            [FromQuery] int pageSize = 50,
+            CancellationToken ct = default)
         {
             var sid = schoolId ?? RequireSchoolId();
+
             var studentRoleId = await _db.Roles
                 .Where(r => r.Name == "Student")
                 .Select(r => r.Id)
                 .FirstOrDefaultAsync(ct);
 
-            var students = await _db.Users
+            // sanitize paging inputs
+            var page = Math.Max(1, pageNumber);
+            var size = Math.Clamp(pageSize, 1, 200);
+
+            var baseQuery = _db.Users
                 .AsNoTracking()
-                .Where(u => u.SchoolId == sid && u.RoleId == studentRoleId && u.IsActive)
-                .Select(u => new { u.Id, u.FullName, u.Email, u.Phone, u.Country, u.DateCreated, u.IsEmailVerified })
+                .Where(u => u.SchoolId == sid && u.RoleId == studentRoleId && u.IsActive);
+
+            var totalCount = await baseQuery.CountAsync(ct);
+
+            var usersPage = await baseQuery
                 .OrderBy(u => u.FullName)
+                .Skip((page - 1) * size)
+                .Take(size)
+                .Select(u => new
+                {
+                    u.Id,
+                    u.FullName,
+                    u.Email,
+                    u.Phone,
+                    u.Country,
+                    u.DateCreated,
+                    u.IsEmailVerified
+                })
                 .ToListAsync(ct);
 
-            return Ok(students);
+            var userIds = usersPage.Select(u => u.Id).ToList();
+
+            var enrollments = await _db.Enrollments
+                .AsNoTracking()
+                .Where(e => userIds.Contains(e.UserId))
+                .Select(e => new { e.UserId, e.ClassroomId })
+                .ToListAsync(ct);
+
+            var items = usersPage.Select(u =>
+            {
+                var en = enrollments.FirstOrDefault(e => e.UserId == u.Id);
+                Guid? classId = en != null ? (Guid?)en.ClassroomId : null;
+
+                return new
+                {
+                    u.Id,
+                    u.FullName,
+                    u.Email,
+                    u.Phone,
+                    u.Country,
+                    u.DateCreated,
+                    u.IsEmailVerified,
+                    ClassId = classId
+                };
+            }).OrderBy(u => u.FullName);
+
+            return Ok(new
+            {
+                Items = items,
+                TotalCount = totalCount,
+                PageNumber = page,
+                PageSize = size
+            });
         }
+
 
 
         [HttpPost("teachers/upsert")]

@@ -1,5 +1,6 @@
 using BlueSandsLMS.Common.DTOs;
-  
+using BlueSandsLMS.Core.Entities;
+
 
 namespace BlueSandsLMS.Common.Interfaces
 {
@@ -10,8 +11,9 @@ namespace BlueSandsLMS.Common.Interfaces
         Task DeleteAsync(Guid classId);
 
         Task<bool> UserIsTeacherAsync(Guid classId, Guid userId);
-        Task EnrollByEmailAsync(Guid classId, string email);
-        Task BulkEnrollAsync(Guid classId, IEnumerable<string> emails);
+        Task EnrollByEmailAsync(Guid classId, string email, ClassRole role = ClassRole.Student);
+        Task BulkEnrollAsync(Guid classId, IEnumerable<string> emails, ClassRole role = ClassRole.Student);
+        Task TransferEnrollmentAsync(Guid classId, string email, Guid? newClassId = null, ClassRole? role = null);
 
         Task AttachTeacherAsync(Guid classId, Guid teacherUserId);
 

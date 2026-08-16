@@ -1,8 +1,7 @@
-
 using System;
 using System.Collections.Generic;
 
-namespace BlueSandsLMS.Common.Teacher
+namespace BlueSandsLMS.Common.DTOs.Teacher
 {
     public sealed class TeacherCommOverviewDto
     {

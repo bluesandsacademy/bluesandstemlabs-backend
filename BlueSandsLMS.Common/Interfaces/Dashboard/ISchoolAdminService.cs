@@ -9,7 +9,7 @@ namespace BlueSandsLMS.Common.Interfaces.Dashboard
     public interface ISchoolAdminService
     {
         Task<SchoolOverviewDto>     GetOverviewAsync(Guid schoolId, CancellationToken ct);
-        Task<TrendsDto>             GetTrendsAsync(Guid schoolId, int days, CancellationToken ct);
+        //Task<TrendsDto>             GetTrendsAsync(Guid schoolId, int days, CancellationToken ct);
         Task<PerformanceDto>        GetPerformanceAsync(Guid schoolId, DateOnly? since, DateOnly? until, CancellationToken ct);
         Task<TeacherActivityDto>    GetTeacherActivityAsync(Guid schoolId, int days, CancellationToken ct);
         Task<ExperimentsCoursesDto> GetExperimentsAndCoursesAsync(Guid schoolId, int days, CancellationToken ct);

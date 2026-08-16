@@ -12,5 +12,9 @@
     <PackageReference Include="AutoMapper" Version="15.0.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\BlueSandsLMS.Core\BlueSandsLMS.Core.csproj" />
+  </ItemGroup>
+
 </Project>
 

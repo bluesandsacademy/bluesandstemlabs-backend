@@ -73,15 +73,15 @@ namespace BlueSandsLMS.Api.Controllers
         public async Task<IActionResult> StudentDashboard(CancellationToken ct)
             => Ok(await _studentDashboard.GetOverviewAsync(CurrentUserId(), ct));
 
-        [HttpGet("api/school-admin/analytics")]
-        [Authorize(Roles = "SchoolAdmin")]
-        public async Task<IActionResult> SchoolAnalytics(CancellationToken ct)
-        {
-            var schoolId = await CurrentSchoolIdAsync(ct);
-            var overview = await _schoolAnalytics.GetOverviewAsync(schoolId, ct);
-            var trends = await _schoolAnalytics.GetTrendsAsync(schoolId, 30, ct);
-            return Ok(new { overview, trends });
-        }
+        //[HttpGet("api/school-admin/analytics")]
+        //[Authorize(Roles = "SchoolAdmin")]
+        //public async Task<IActionResult> SchoolAnalytics(CancellationToken ct)
+        //{
+        //    var schoolId = await CurrentSchoolIdAsync(ct);
+        //    var overview = await _schoolAnalytics.GetOverviewAsync(schoolId, ct);
+        //    var trends = await _schoolAnalytics.GetTrendsAsync(schoolId, 30, ct);
+        //    return Ok(new { overview, trends });
+        //}
 
         [HttpGet("api/school-admin/billing")]
         [Authorize(Roles = "SchoolAdmin")]

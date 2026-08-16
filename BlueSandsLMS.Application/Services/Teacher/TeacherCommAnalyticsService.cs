@@ -1,10 +1,5 @@
-
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+using BlueSandsLMS.Common.DTOs.Teacher;
 using BlueSandsLMS.Common.Interfaces.Teacher;
-using BlueSandsLMS.Common.Teacher;
 using BlueSandsLMS.Core.Entities;
 using BlueSandsLMS.Infrastructure;
 using Microsoft.EntityFrameworkCore;

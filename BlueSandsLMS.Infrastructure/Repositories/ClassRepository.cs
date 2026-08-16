@@ -100,7 +100,7 @@ public class ClassRepository : IClassRepository
         return user?.RoleName == "SchoolAdmin";
     }
 
-    public async Task EnrollByEmailAsync(Guid classId, string email)
+    public async Task EnrollByEmailAsync(Guid classId, string email, ClassRole role = ClassRole.Student)
     {
         email = email.Trim().ToLowerInvariant();
 
@@ -113,13 +113,14 @@ public class ClassRepository : IClassRepository
                 .FirstOrDefaultAsync(c => c.Id == classId)
                 ?? throw new InvalidOperationException("Classroom not found");
 
-            var studentRoleId = await _db.Roles
-                .Where(r => r.Name == "Student")
+            var roleName = role == ClassRole.Teacher ? "Teacher" : "Student";
+            var roleId = await _db.Roles
+                .Where(r => r.Name == roleName)
                 .Select(r => r.Id)
                 .FirstOrDefaultAsync();
 
-            if (studentRoleId == Guid.Empty)
-                throw new InvalidOperationException("Student role not configured");
+            if (roleId == Guid.Empty)
+                throw new InvalidOperationException($"{roleName} role not configured");
 
             user = new User
             {
@@ -128,7 +129,7 @@ public class ClassRepository : IClassRepository
                 FullName = email.Split('@')[0],
 
                 PasswordHash = "INVITE_PENDING",
-                RoleId = studentRoleId,
+                RoleId = roleId,
                 SchoolId = classroom.SchoolId,
                 IsActive = true,
                 IsEmailVerified = false,
@@ -145,7 +146,7 @@ public class ClassRepository : IClassRepository
                 Id = Guid.NewGuid(),
                 ClassroomId = classId,
                 UserId = user.Id,
-                RoleInClass = ClassRole.Student,
+                RoleInClass = role,
                 CreatedAt = DateTime.UtcNow
             });
         }
@@ -153,7 +154,7 @@ public class ClassRepository : IClassRepository
         await _db.SaveChangesAsync();
     }
 
-    public async Task BulkEnrollAsync(Guid classId, IEnumerable<string> emails)
+    public async Task BulkEnrollAsync(Guid classId, IEnumerable<string> emails, ClassRole role = ClassRole.Student)
     {
         var emailList = emails.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (emailList.Count == 0) return;
@@ -176,10 +177,67 @@ public class ClassRepository : IClassRepository
                 Id = Guid.NewGuid(),
                 ClassroomId = classId,
                 UserId = uid,
-                RoleInClass = ClassRole.Student,
+                RoleInClass = role,
                 CreatedAt = DateTime.UtcNow
             });
         }
+        await _db.SaveChangesAsync();
+    }
+
+
+    public async Task TransferEnrollmentAsync(Guid classId, string email, Guid? newClassId = null, ClassRole? role = null)
+    {
+        email = email.Trim().ToLowerInvariant();
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email)
+            ?? throw new InvalidOperationException("User not found.");
+
+        var enrollment = await _db.Enrollments
+            .FirstOrDefaultAsync(e => e.ClassroomId == classId && e.UserId == user.Id)
+            ?? throw new InvalidOperationException("User is not enrolled in this class.");
+
+        // Case 1: Transfer to a new class
+        if (newClassId.HasValue && newClassId.Value != classId)
+        {
+            var targetClass = await _db.Classrooms.FindAsync(newClassId.Value)
+                ?? throw new InvalidOperationException("Target class not found.");
+
+            if (targetClass.SchoolId != user.SchoolId)
+                throw new InvalidOperationException("Target class belongs to a different school.");
+
+            // Remove from current class
+            _db.Enrollments.Remove(enrollment);
+
+            // Check if already enrolled in target class
+            var alreadyInTarget = await _db.Enrollments
+                .AnyAsync(e => e.ClassroomId == newClassId.Value && e.UserId == user.Id);
+
+            if (!alreadyInTarget)
+            {
+                _db.Enrollments.Add(new Enrollment
+                {
+                    Id = Guid.NewGuid(),
+                    ClassroomId = newClassId.Value,
+                    UserId = user.Id,
+                    RoleInClass = role ?? enrollment.RoleInClass,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+            else if (role.HasValue)
+            {
+                // Already in target class - just update the role there
+                var targetEnrollment = await _db.Enrollments
+                    .FirstOrDefaultAsync(e => e.ClassroomId == newClassId.Value && e.UserId == user.Id);
+                if (targetEnrollment != null)
+                    targetEnrollment.RoleInClass = role.Value;
+            }
+        }
+        // Case 2: Change role in current class only
+        else if (role.HasValue)
+        {
+            enrollment.RoleInClass = role.Value;
+        }
+
         await _db.SaveChangesAsync();
     }
 

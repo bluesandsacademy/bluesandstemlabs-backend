@@ -3,6 +3,7 @@ using BlueSandsLMS.Common.Interfaces;
 using BlueSandsLMS.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using System.Globalization;
 
 namespace BlueSandsLMS.Application.Services
 {
@@ -269,7 +270,141 @@ namespace BlueSandsLMS.Application.Services
             return dto;
         }
 
-       
-       
+
+        //public async Task<GrowthChartResponse> GetUsersGrowthAsync()
+        //{
+        //    const int months = 12; // Adjusted to track monthly intervals
+        //    const string cacheKey = "dash:growth:global:monthly";
+        //    if (_cache.TryGetValue(cacheKey, out GrowthChartResponse? cached) && cached is not null)
+        //        return cached;
+
+        //    var today = DateTime.UtcNow.Date;
+
+        //    // Start at the 1st day of the month 'months - 1' ago
+        //    var firstOfMonth = new DateTime(today.Year, today.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        //    var startDate = firstOfMonth.AddMonths(-(months - 1));
+        //    var endExclusive = firstOfMonth.AddMonths(1); // Up to the end of the current month
+
+        //    // Query database for dates within range
+        //    var createdDates = await _db.Users
+        //        .AsNoTracking()
+        //        .Where(u => u.DateCreated >= startDate && u.DateCreated < endExclusive)
+        //        .Select(u => u.DateCreated)
+        //        .ToListAsync();
+
+        //    // Group in-memory by (Year, Month) and count totals
+        //    var grouped = createdDates
+        //        .GroupBy(d => new { d.Year, d.Month })
+        //        .ToDictionary(g => g.Key, g => g.Count());
+
+        //    var points = new DataPoints[months];
+        //    for (int i = 0; i < months; i++)
+        //    {
+        //        var monthDate = startDate.AddMonths(i);
+        //        var key = new { monthDate.Year, monthDate.Month };
+
+        //        grouped.TryGetValue(key, out var cnt);
+
+        //        var label = monthDate.ToString("MMM yyyy", CultureInfo.InvariantCulture); // e.g., "Jul 2026"
+        //        var timestamp = DateTime.SpecifyKind(monthDate, DateTimeKind.Utc);
+
+        //        points[i] = new DataPoints(timestamp, cnt, label);
+        //    }
+
+        //    var title = "Growth — users";
+        //    var metricName = "users";
+        //    var resp = new GrowthChartResponse(title, metricName, points);
+
+        //    _cache.Set(cacheKey, resp, TimeSpan.FromMinutes(5));
+        //    return resp;
+        //}
+
+        public async Task<GrowthChartResponse> GetUsersGrowthAsync()
+        {
+            const string cacheKey = "dash:growth:global:static";
+            if (_cache.TryGetValue(cacheKey, out GrowthChartResponse? cached) && cached is not null)
+                return cached;
+
+            var currentYear = DateTime.UtcNow.Year;
+
+            // Hardcoded monthly values (1 = Jan, 12 = Dec)
+            var staticMonthlyData = new Dictionary<int, int>
+            {
+                { 1, 720 },  // Jan
+                { 2, 800 },  // Feb
+                { 3, 700 },  // Mar
+                { 4, 500 },  // Apr
+                { 5, 3528 },  // May
+                { 6, 4150 },  // Jun
+                { 7, 340 },  // Jul
+                { 8, 880 },  // Aug
+                { 9, 950 },  // Sep
+                { 10, 110 }, // Oct
+                { 11, 125 }, // Nov
+                { 12, 140 }  // Dec
+            };
+
+            var points = new DataPoints[12];
+            for (int month = 1; month <= 12; month++)
+            {
+                var monthDate = new DateTime(currentYear, month, 1, 0, 0, 0, DateTimeKind.Utc);
+                var cnt = staticMonthlyData[month];
+                var label = monthDate.ToString("MMM yyyy", CultureInfo.InvariantCulture);
+
+                points[month - 1] = new DataPoints(monthDate, cnt, label);
+            }
+
+            var title = "Growth — users";
+            var metricName = "users";
+            var resp = new GrowthChartResponse(title, metricName, points);
+
+            _cache.Set(cacheKey, resp, TimeSpan.FromMinutes(60)); // Cached longer since data is static
+
+            return await Task.FromResult(resp);
+        }
+
+        public async Task<GrowthChartResponse> GetRevenueGrowthAsync()
+        {
+            const string cacheKey = "dash:growth:revenue:static";
+            if (_cache.TryGetValue(cacheKey, out GrowthChartResponse? cached) && cached is not null)
+                return cached;
+
+            // Use int or long values instead of decimal 'm' literals
+            var staticRevenueData = new (int Year, int Month, int Value)[]
+             {
+                (2026, 1,  4_550_350),          // Jan 26
+                (2026, 2,  5_810_900),          // Feb 26
+                (2026, 3,  4_650_000),          // Mar 26
+                (2026, 4,  5_000_000),          // Apr 26
+                (2026, 5,  6_210_000 ),          // May 26
+                (2026, 6,  7_040_000),          // Jun 26
+                (2026, 7,  0),          // Jul 26
+                (2026, 8,  0),          // Aug 26
+                (2026, 9,  0),          // Sep 26
+                (2026, 10, 4_550_350),  // Oct 26
+                (2026, 11, 250_000),    // Nov 26
+                (2026, 12, 7_040_000)           // Dec 26
+             };
+
+            var points = new DataPoints[staticRevenueData.Length];
+            for (int i = 0; i < staticRevenueData.Length; i++)
+            {
+                var item = staticRevenueData[i];
+                var monthDate = new DateTime(item.Year, item.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+                var label = monthDate.ToString("MMM yy", CultureInfo.InvariantCulture);
+
+                // Value is passed directly as int
+                points[i] = new DataPoints(monthDate, item.Value, label);
+            }
+
+            var title = "Revenue Growth";
+            var metricName = "Revenue (NGN)";
+            var resp = new GrowthChartResponse(title, metricName, points);
+
+            _cache.Set(cacheKey, resp, TimeSpan.FromMinutes(60));
+
+            return await Task.FromResult(resp);
+        }
+
     }
 }

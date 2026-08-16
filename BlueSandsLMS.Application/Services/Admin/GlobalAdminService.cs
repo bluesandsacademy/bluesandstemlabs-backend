@@ -534,5 +534,115 @@ namespace BlueSandsLMS.Application.Services.Admin
 
             return new PagedResult<SupportMessageDto>(page, pageSize, total, items);
         }
+
+
+        public async Task<PagedResult<SchoolDetailDto>> GetSchoolsAsync(SchoolQuery query, CancellationToken ct = default)
+        {
+            if (query.Page <= 0) query = query with { Page = 1 };
+            if (query.PageSize is < 1 or > 100) query = query with { PageSize = 20 };
+
+            var q = _db.Schools.AsNoTracking().AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(query.Q))
+            {
+                var needle = query.Q.Trim().ToLower();
+                q = q.Where(s =>
+                    s.Name.ToLower().Contains(needle) ||
+                    s.Subdomain.ToLower().Contains(needle) ||
+                    s.ContactEmail.ToLower().Contains(needle));
+            }
+
+            if (!string.IsNullOrWhiteSpace(query.Country))
+            {
+                var country = query.Country.Trim().ToLower();
+                q = q.Where(s => s.Country.ToLower() == country);
+            }
+
+            if (query.IsActive.HasValue)
+                q = q.Where(s => s.IsActive == query.IsActive.Value);
+
+            var total = await q.CountAsync(ct);
+
+            var schools = await q
+                .OrderByDescending(s => s.DateCreated)
+                .Skip((query.Page - 1) * query.PageSize)
+                .Take(query.PageSize)
+                .ToListAsync(ct);
+
+            var schoolIds = schools.Select(s => s.Id).ToList();
+
+            // Load classes for these schools
+            var classrooms = await _db.Classrooms.AsNoTracking()
+                .Where(c => schoolIds.Contains(c.SchoolId))
+                .Select(c => new { c.Id, c.SchoolId, c.Name, c.Subject, c.CreatedAt })
+                .ToListAsync(ct);
+
+            var classroomIds = classrooms.Select(c => c.Id).ToList();
+
+            // Load enrollment counts per classroom (grouped by role)
+            var enrollmentCounts = await _db.Enrollments.AsNoTracking()
+                .Where(e => classroomIds.Contains(e.ClassroomId))
+                .GroupBy(e => new { e.ClassroomId, e.RoleInClass })
+                .Select(g => new { g.Key.ClassroomId, g.Key.RoleInClass, Count = g.Count() })
+                .ToListAsync(ct);
+
+            // Load teachers (users with Teacher role) for these schools
+            var teachers = await _db.Users.AsNoTracking()
+                .Where(u => u.SchoolId.HasValue && schoolIds.Contains(u.SchoolId.Value)
+                            && u.Role != null && u.Role.Name == "Teacher")
+                .Select(u => new { u.Id, u.SchoolId, u.FullName, u.Email, u.IsActive, u.LastLogin })
+                .ToListAsync(ct);
+
+            // Load student and teacher counts per school
+            var roleCounts = await _db.Users.AsNoTracking()
+                .Where(u => u.SchoolId.HasValue && schoolIds.Contains(u.SchoolId.Value) && u.Role != null)
+                .GroupBy(u => new { u.SchoolId, RoleName = u.Role!.Name })
+                .Select(g => new { g.Key.SchoolId, g.Key.RoleName, Count = g.Count() })
+                .ToListAsync(ct);
+
+            // Assemble the DTOs
+            var items = schools.Select(s =>
+            {
+                var schoolClasses = classrooms.Where(c => c.SchoolId == s.Id).ToList();
+                var schoolClassIds = schoolClasses.Select(c => c.Id).ToList();
+
+                var classDtos = schoolClasses.Select(c =>
+                {
+                    var studentCount = enrollmentCounts
+                        .Where(e => e.ClassroomId == c.Id && e.RoleInClass == ClassRole.Student)
+                        .Sum(e => e.Count);
+                    var teacherCount = enrollmentCounts
+                        .Where(e => e.ClassroomId == c.Id && e.RoleInClass == ClassRole.Teacher)
+                        .Sum(e => e.Count);
+                    return new SchoolClassSummaryDto(c.Id, c.Name, c.Subject, c.CreatedAt, studentCount, teacherCount);
+                }).ToList();
+
+                var teacherDtos = teachers
+                    .Where(t => t.SchoolId == s.Id)
+                    .Select(t => new SchoolTeacherSummaryDto(t.Id, t.FullName, t.Email, t.IsActive, t.LastLogin))
+                    .ToList();
+
+                var studentCount = roleCounts
+                        .Where(r => r.SchoolId == s.Id && r.RoleName == "Student")
+                        .Sum(r => r.Count);
+                var teacherCount = roleCounts
+                    .Where(r => r.SchoolId == s.Id && r.RoleName == "Teacher")
+                    .Sum(r => r.Count);
+
+                return new SchoolDetailDto(
+                    s.Id, s.Name, s.Subdomain, s.IsActive, s.DateCreated,
+                    s.Country, s.Currency, s.TotalStudents,
+                    s.ContactName, s.ContactEmail, s.ContactPhone,
+                    s.State, s.City, s.Lga,
+                    s.EstimatedScienceStudentCount, s.DisabledStudentCount,
+                    ClassCount: classDtos.Count,
+                    TeacherCount: teacherCount,
+                    StudentCount: studentCount,
+                    classDtos, teacherDtos
+                );
+            }).ToList();
+
+            return new PagedResult<SchoolDetailDto>(query.Page, query.PageSize, total, items);
+        }
     }
 }

@@ -8,6 +8,7 @@ using BlueSandsLMS.Application.Services.Admin;
 using BlueSandsLMS.Application.Services.Cache;
 using BlueSandsLMS.Application.Services.Dashboard;
 using BlueSandsLMS.Application.Services.Infrastructure;
+using BlueSandsLMS.Application.Services.PaymentsV2;
 using BlueSandsLMS.Application.Services.Student;
 using BlueSandsLMS.Application.Services.Teacher;
 using BlueSandsLMS.Common.Interfaces;
@@ -30,7 +31,6 @@ using System.ComponentModel;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using CurrentUser = BlueSandsLMS.Application.Services.CurrentUser;
 using ISchoolAdminAnalytics = BlueSandsLMS.Common.Interfaces.Dashboard.ISchoolAdminService;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
@@ -62,7 +62,9 @@ builder.Services.AddSingleton<BlueSandsLMS.Common.Interfaces.IPraxiLabsService,
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ISchoolService, SchoolService>();
-builder.Services.AddScoped<IExcelUploadService, ExcelUploadService>();
+builder.Services.AddScoped<ISchoolService, SchoolService>();
+builder.Services.AddScoped<IPaymentsV2Repository, PaymentsV2Repository>();
+builder.Services.AddScoped<IPaymentsV2Service, PaymentsV2Service>();
 
 //builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 builder.Services.AddScoped<IEmailService, MailKitEmailService>();
@@ -114,7 +116,7 @@ builder.Services.AddAuthorization(options =>
 
 // Register HttpContextAccessor and CurrentUser wrapper
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<BlueSandsLMS.Application.Services.ICurrentUser, BlueSandsLMS.Application.Services.CurrentUser>();
+builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 
 // Resolve JWT secret — support "REPLACE_WITH_ENV_VAR: <ENVNAME>" placeholder used in appsettings
 string ResolveJwtSecret(string configured)

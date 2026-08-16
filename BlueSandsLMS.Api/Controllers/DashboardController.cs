@@ -1,4 +1,5 @@
 using BlueSandsLMS.Api.Services;
+using BlueSandsLMS.Application.Services;
 using BlueSandsLMS.Common.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -65,5 +66,26 @@ namespace BlueSandsLMS.Api.Controllers
             return Ok(await _svc.GetGlobalAsync());
         }
 
+        [HttpGet("growth-users")]
+        [Authorize(Roles = "GlobalAdmin,Admin")]
+        public async Task<IActionResult> GrowthUsers()
+        {
+            if (!(_currentUser.IsInRole("GlobalAdmin") || _currentUser.IsInRole("Admin")))
+                return Forbid();
+
+            var result = await _svc.GetUsersGrowthAsync();
+            return Ok(result);
+        }
+
+        [HttpGet("revenue-growth")]
+        [Authorize(Roles = "GlobalAdmin,Admin")]
+        public async Task<IActionResult> RevenueGrowth()
+        {
+            if (!(_currentUser.IsInRole("GlobalAdmin") || _currentUser.IsInRole("Admin")))
+                return Forbid();
+
+            var result = await _svc.GetRevenueGrowthAsync();
+            return Ok(result);
+        }
     }
 }

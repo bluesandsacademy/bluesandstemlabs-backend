@@ -103,55 +103,55 @@ namespace BlueSandsLMS.Application.Services.Dashboard
             );
         }
 
-        public async Task<TrendsDto> GetTrendsAsync(Guid schoolId, int days, CancellationToken ct)
-        {
-            days = Math.Clamp(days <= 0 ? 30 : days, 7, 120);
-            var since = DateTime.UtcNow.Date.AddDays(-days);
+        //public async Task<TrendsDto> GetTrendsAsync(Guid schoolId, int days, CancellationToken ct)
+        //{
+        //    days = Math.Clamp(days <= 0 ? 30 : days, 7, 120);
+        //    var since = DateTime.UtcNow.Date.AddDays(-days);
 
-            var dailyUsers = await _db.QuizAttempts.AsNoTracking()
-                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), q => q.ClassroomId, c => c.Id, (q, _) => q)
-                .Where(q => q.CompletedAt != null && q.CompletedAt.Value.Date >= since)
-                .GroupBy(q => q.CompletedAt!.Value.Date)
-                .Select(g => new { Date = g.Key, Users = g.Select(x => x.UserId).Distinct().Count() })
-                .OrderBy(x => x.Date).ToListAsync(ct);
+        //    var dailyUsers = await _db.QuizAttempts.AsNoTracking()
+        //        .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), q => q.ClassroomId, c => c.Id, (q, _) => q)
+        //        .Where(q => q.CompletedAt != null && q.CompletedAt.Value.Date >= since)
+        //        .GroupBy(q => q.CompletedAt!.Value.Date)
+        //        .Select(g => new { Date = g.Key, Users = g.Select(x => x.UserId).Distinct().Count() })
+        //        .OrderBy(x => x.Date).ToListAsync(ct);
 
-            var activeUsers = dailyUsers
-                .Select(x => new DataPoint(new DateTimeOffset(x.Date, TimeSpan.Zero), x.Users))
-                .ToList();
+        //    var activeUsers = dailyUsers
+        //        .Select(x => new DataPoint(new DateTimeOffset(x.Date, TimeSpan.Zero), x.Users))
+        //        .ToList();
 
-            var ex = await _db.ExperimentLaunches
-                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), e => e.ClassroomId, c => c.Id, (e, _) => e)
-                .Where(e => e.StartedAt >= since)
-                .GroupBy(e => e.StartedAt.Date)
-                .Select(g => new { Date = g.Key, Count = g.Count() })
-                .OrderBy(x => x.Date).ToListAsync(ct);
+        //    var ex = await _db.ExperimentLaunches
+        //        .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), e => e.ClassroomId, c => c.Id, (e, _) => e)
+        //        .Where(e => e.StartedAt >= since)
+        //        .GroupBy(e => e.StartedAt.Date)
+        //        .Select(g => new { Date = g.Key, Count = g.Count() })
+        //        .OrderBy(x => x.Date).ToListAsync(ct);
 
-            var experimentsRun = ex
-                .Select(x => new DataPoint(new DateTimeOffset(x.Date, TimeSpan.Zero), x.Count))
-                .ToList();
+        //    var experimentsRun = ex
+        //        .Select(x => new DataPoint(new DateTimeOffset(x.Date, TimeSpan.Zero), x.Count))
+        //        .ToList();
 
-            var dailyScores = await _db.QuizAttempts.AsNoTracking()
-                .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), q => q.ClassroomId, c => c.Id, (q, _) => q)
-                .Where(q => q.CompletedAt != null && q.CompletedAt.Value.Date >= since)
-                .Select(q => new
-                {
-                    D = q.CompletedAt!.Value.Date,
-                    S = (double?)(q.Score0to1 * 100m)
-                })
-                .ToListAsync(ct);
+        //    var dailyScores = await _db.QuizAttempts.AsNoTracking()
+        //        .Join(_db.Classrooms.Where(c => c.SchoolId == schoolId), q => q.ClassroomId, c => c.Id, (q, _) => q)
+        //        .Where(q => q.CompletedAt != null && q.CompletedAt.Value.Date >= since)
+        //        .Select(q => new
+        //        {
+        //            D = q.CompletedAt!.Value.Date,
+        //            S = (double?)(q.Score0to1 * 100m)
+        //        })
+        //        .ToListAsync(ct);
 
-            var avgScores = dailyScores
-                .GroupBy(x => x.D)
-                .Select(g =>
-                {
-                    var vals = g.Where(z => z.S.HasValue).Select(z => z.S!.Value).ToList();
-                    var v = vals.Count == 0 ? 0.0 : vals.Average();
-                    return new DataPoint(new DateTimeOffset(g.Key, TimeSpan.Zero), v);
-                })
-                .OrderBy(x => x.Ts).ToList();
+        //    var avgScores = dailyScores
+        //        .GroupBy(x => x.D)
+        //        .Select(g =>
+        //        {
+        //            var vals = g.Where(z => z.S.HasValue).Select(z => z.S!.Value).ToList();
+        //            var v = vals.Count == 0 ? 0.0 : vals.Average();
+        //            return new DataPoint(new DateTimeOffset(g.Key, TimeSpan.Zero), v);
+        //        })
+        //        .OrderBy(x => x.Ts).ToList();
 
-            return new TrendsDto(activeUsers, experimentsRun, avgScores);
-        }
+        //    return new TrendsDto(activeUsers, experimentsRun, avgScores);
+        //}
 
         public async Task<PerformanceDto> GetPerformanceAsync(Guid schoolId, DateOnly? since, DateOnly? until, CancellationToken ct)
         {

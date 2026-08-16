@@ -5,8 +5,9 @@ namespace BlueSandsLMS.Common.DTOs
 
     public record CreateClassDto(string Name, string Subject);
     public record UpdateClassDto(string Name, string Subject);
-    public record EnrollByEmailDto(string Email);
-    public record BulkEnrollDto(List<string> Emails);
+    public record EnrollByEmailDto(string Email, ClassRoleDto Role = ClassRoleDto.Student);
+    public record BulkEnrollDto(List<string> Emails, ClassRoleDto Role = ClassRoleDto.Student);
+    public record TransferEnrollmentDto(string Email, Guid? NewClassId = null, ClassRoleDto? Role = null);
 
     public record AttachTeacherDto(Guid TeacherId);
 

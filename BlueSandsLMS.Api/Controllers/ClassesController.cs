@@ -4,6 +4,7 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using BlueSandsLMS.Common.DTOs;
 using BlueSandsLMS.Common.Interfaces;
+using BlueSandsLMS.Core.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -76,19 +77,37 @@ namespace BlueSandsLMS.Api.Controllers
             return Ok(list.ToArray());
         }
 
-        [HttpPost("{id:guid}/enroll")]
-        public async Task<IActionResult> Enroll(Guid id, [FromBody] EnrollByEmailDto dto)
+        [HttpPost("enroll")]
+        public async Task<IActionResult> Enroll(Guid classId, [FromBody] EnrollByEmailDto dto)
         {
-            if (!await _repo.UserIsTeacherAsync(id, UserId())) return Forbid();
-            await _repo.EnrollByEmailAsync(id, dto.Email);
+            if (!await _repo.UserIsTeacherAsync(classId, UserId())) return Forbid();
+            var role = dto.Role == ClassRoleDto.Teacher ? ClassRole.Teacher : ClassRole.Student;
+            await _repo.EnrollByEmailAsync(classId, dto.Email, role);
             return NoContent();
         }
 
-        [HttpPost("{id:guid}/bulk-enroll")]
-        public async Task<IActionResult> BulkEnroll(Guid id, [FromBody] BulkEnrollDto dto)
+        [HttpPost("bulk-enroll")]
+        public async Task<IActionResult> BulkEnroll(Guid classId, [FromBody] BulkEnrollDto dto)
         {
-            if (!await _repo.UserIsTeacherAsync(id, UserId())) return Forbid();
-            await _repo.BulkEnrollAsync(id, dto.Emails ?? Enumerable.Empty<string>());
+            if (!await _repo.UserIsTeacherAsync(classId, UserId())) return Forbid();
+            var role = dto.Role == ClassRoleDto.Teacher ? ClassRole.Teacher : ClassRole.Student;
+            await _repo.BulkEnrollAsync(classId, dto.Emails ?? Enumerable.Empty<string>(), role);
+            return NoContent();
+        }
+
+        [HttpPut("enroll")]
+        public async Task<IActionResult> UpdateEnrollment(Guid oldClassId, [FromBody] TransferEnrollmentDto dto)
+        {
+            if (!await _repo.UserIsTeacherAsync(oldClassId, UserId())) return Forbid();
+
+            ClassRole? role = dto.Role switch
+            {
+                ClassRoleDto.Teacher => ClassRole.Teacher,
+                ClassRoleDto.Student => ClassRole.Student,
+                _ => null
+            };
+
+            await _repo.TransferEnrollmentAsync(oldClassId, dto.Email, dto.NewClassId, role);
             return NoContent();
         }
     }
