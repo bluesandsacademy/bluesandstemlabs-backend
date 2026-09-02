@@ -335,20 +335,21 @@ namespace BlueSandsLMS.Application.Services
                 { 3, 700 },  // Mar
                 { 4, 500 },  // Apr
                 { 5, 3528 },  // May
-                { 6, 4150 },  // Jun
-                { 7, 340 },  // Jul
-                { 8, 880 },  // Aug
-                { 9, 950 },  // Sep
-                { 10, 110 }, // Oct
-                { 11, 125 }, // Nov
-                { 12, 140 }  // Dec
+                { 6, 4150 }  // Jun
+                //{ 7, 340 },  // Jul
+                //{ 8, 880 },  // Aug
+                //{ 9, 950 },  // Sep
+                //{ 10, 110 }, // Oct
+                //{ 11, 125 }, // Nov
+                //{ 12, 140 }  // Dec
             };
 
             var points = new DataPoints[12];
             for (int month = 1; month <= 12; month++)
             {
                 var monthDate = new DateTime(currentYear, month, 1, 0, 0, 0, DateTimeKind.Utc);
-                var cnt = staticMonthlyData[month];
+                // Use TryGetValue to avoid KeyNotFoundException for months not present in the static map
+                staticMonthlyData.TryGetValue(month, out var cnt);
                 var label = monthDate.ToString("MMM yyyy", CultureInfo.InvariantCulture);
 
                 points[month - 1] = new DataPoints(monthDate, cnt, label);
@@ -378,12 +379,12 @@ namespace BlueSandsLMS.Application.Services
                 (2026, 4,  5_000_000),          // Apr 26
                 (2026, 5,  6_210_000 ),          // May 26
                 (2026, 6,  7_040_000),          // Jun 26
-                (2026, 7,  0),          // Jul 26
-                (2026, 8,  0),          // Aug 26
-                (2026, 9,  0),          // Sep 26
-                (2026, 10, 4_550_350),  // Oct 26
-                (2026, 11, 250_000),    // Nov 26
-                (2026, 12, 7_040_000)           // Dec 26
+                //(2026, 7,  0),          // Jul 26
+                //(2026, 8,  0),          // Aug 26
+                //(2026, 9,  0),          // Sep 26
+                //(2026, 10, 4_550_350),  // Oct 26
+                //(2026, 11, 250_000),    // Nov 26
+                //(2026, 12, 7_040_000)           // Dec 26
              };
 
             var points = new DataPoints[staticRevenueData.Length];

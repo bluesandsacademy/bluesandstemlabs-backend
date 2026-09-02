@@ -2,6 +2,7 @@ using BlueSandsLMS.Common.DTOs.Admin;
 using BlueSandsLMS.Common.Interfaces.Admin;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+
 namespace BlueSandsLMS.Api.Controllers
 {
     [ApiController]
@@ -10,11 +11,18 @@ namespace BlueSandsLMS.Api.Controllers
     public sealed class GlobalAdminV1Controller : ControllerBase
     {
         private readonly IGlobalAdminService _svc;
-        public GlobalAdminV1Controller(IGlobalAdminService svc) => _svc = svc;
+        private readonly IHardcodedGlobalAdminProvider _hardcoded;
+
+        public GlobalAdminV1Controller(IGlobalAdminService svc, IHardcodedGlobalAdminProvider hardcoded) =>
+            (_svc, _hardcoded) = (svc, hardcoded);
 
         [HttpGet("totals")]
         public async Task<ActionResult<GlobalAdminTotalsDto>> Totals(CancellationToken ct)
             => Ok(await _svc.GetTotalsAsync(ct));
+
+        [HttpGet("prompt-totals")]
+        public async Task<ActionResult<PromptTotalsDto>> PromptTotals(CancellationToken ct = default)
+            => Ok(await _hardcoded.GetPromptTotalsAsync(ct));
 
         [HttpGet("growth")]
         public async Task<ActionResult<GrowthSeriesDto>> Growth([FromQuery] string metric = "users", [FromQuery] string period = "day", [FromQuery] int points = 30, CancellationToken ct = default)

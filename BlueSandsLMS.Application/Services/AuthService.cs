@@ -196,7 +196,7 @@ namespace BlueSandsLMS.Application.Services
                 RoleId = studentRole.Id,
                 IsActive = true,
                 DateCreated = DateTime.UtcNow,
-
+                IsEmailVerified = true,
                 Phone = dto.Phone ?? string.Empty,
                 Gender = dto.Gender,
                 Country = dto.Country ?? string.Empty
@@ -430,7 +430,7 @@ namespace BlueSandsLMS.Application.Services
                 SchoolId = school.Id,
                 IsActive = true,
                 DateCreated = DateTime.UtcNow,
-
+                IsEmailVerified = true,
                 Phone = dto.Phone,
                 Country = dto.Country,
             };

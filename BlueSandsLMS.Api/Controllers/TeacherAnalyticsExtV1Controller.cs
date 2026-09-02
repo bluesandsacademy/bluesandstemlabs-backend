@@ -54,114 +54,206 @@ namespace BlueSandsLMS.Api.Controllers
 
         private static double[] NewMonthlyBucket() => new double[12];
 
+        //[HttpGet("overview")]
+        //public async Task<IActionResult> Overview(CancellationToken ct)
+        //{
+        //    var teacherId = Me();
+        //    var classroomIds = await GetTeacherClassroomIdsAsync(teacherId, ct);
+        //    var studentIds = await GetStudentIdsAsync(classroomIds, ct);
+
+        //    var totalIlsCreated = await _db.InteractiveLearningSpaces.AsNoTracking()
+        //        .CountAsync(i => i.CreatedBy == teacherId, ct);
+
+        //    var totalAssignments = classroomIds.Count == 0 ? 0
+        //        : await _db.Assignments.AsNoTracking().CountAsync(a => classroomIds.Contains(a.ClassroomId), ct);
+
+        //    var assignmentIds = classroomIds.Count == 0 ? new List<Guid>()
+        //        : await _db.Assignments.AsNoTracking()
+        //            .Where(a => classroomIds.Contains(a.ClassroomId))
+        //            .Select(a => a.Id)
+        //            .ToListAsync(ct);
+
+        //    var pendingToGrade = assignmentIds.Count == 0 ? 0
+        //        : await _db.Submissions.AsNoTracking()
+        //            .CountAsync(s => assignmentIds.Contains(s.AssignmentId) && s.Status == SubmissionStatus.Submitted, ct);
+
+        //    var sessions = studentIds.Count == 0 ? new List<StudentIlsSession>()
+        //        : await _db.StudentIlsSessions.AsNoTracking()
+        //            .Where(s => studentIds.Contains(s.StudentId))
+        //            .Include(s => s.Assessment)
+        //            .ToListAsync(ct);
+
+        //    var experimentsCompleted = sessions.Count(s => s.CompletedAt != null);
+
+        //    var scores = sessions.Where(s => s.Assessment != null).Select(s => (double)s.Assessment!.Score * 100.0).ToList();
+        //    var avgClassScore = scores.Count == 0 ? 0.0 : Math.Round(scores.Average(), 2);
+
+        //    var weekAgo = DateTime.UtcNow.AddDays(-7);
+        //    var activeStudentsThisWeek = sessions
+        //        .Where(s => s.UpdatedAt >= weekAgo)
+        //        .Select(s => s.StudentId)
+        //        .Distinct()
+        //        .Count();
+
+        //    var names = studentIds.Count == 0 ? new Dictionary<Guid, string>()
+        //        : (await _db.Users.AsNoTracking().Where(u => studentIds.Contains(u.Id))
+        //            .Select(u => new { u.Id, u.FullName }).ToListAsync(ct))
+        //            .ToDictionary(x => x.Id, x => x.FullName);
+
+        //    var classroomNameByStudent = new Dictionary<Guid, string>();
+        //    if (classroomIds.Count > 0)
+        //    {
+        //        var enrollRows = await _db.Enrollments.AsNoTracking()
+        //            .Where(e => classroomIds.Contains(e.ClassroomId) && e.RoleInClass == ClassRole.Student)
+        //            .Select(e => new { e.UserId, e.ClassroomId })
+        //            .ToListAsync(ct);
+        //        var classNames = await _db.Classrooms.AsNoTracking()
+        //            .Where(c => classroomIds.Contains(c.Id))
+        //            .Select(c => new { c.Id, c.Name })
+        //            .ToDictionaryAsync(c => c.Id, c => c.Name, ct);
+        //        foreach (var row in enrollRows)
+        //            if (!classroomNameByStudent.ContainsKey(row.UserId) && classNames.TryGetValue(row.ClassroomId, out var cn))
+        //                classroomNameByStudent[row.UserId] = cn;
+        //    }
+
+        //    var perStudent = sessions
+        //        .GroupBy(s => s.StudentId)
+        //        .Select(g => new
+        //        {
+        //            userId = g.Key,
+        //            studentName = names.TryGetValue(g.Key, out var n) ? n : "Unknown",
+        //            avgScore = g.Where(s => s.Assessment != null).Select(s => (double)s.Assessment!.Score * 100.0).DefaultIfEmpty(0.0).Average(),
+        //            experimentsCompleted = g.Count(s => s.CompletedAt != null),
+        //            classroomName = classroomNameByStudent.TryGetValue(g.Key, out var cn2) ? cn2 : ""
+        //        })
+        //        .ToList();
+
+        //    var topPerforming = perStudent
+        //        .OrderByDescending(s => s.avgScore)
+        //        .Take(5)
+        //        .Select(s => new { s.userId, s.studentName, avgScore = Math.Round(s.avgScore, 2), s.experimentsCompleted, s.classroomName })
+        //        .ToList();
+
+        //    var atRisk = perStudent
+        //        .Where(s => s.experimentsCompleted == 0 || s.avgScore < 50.0)
+        //        .OrderBy(s => s.avgScore)
+        //        .Take(5)
+        //        .Select(s => new
+        //        {
+        //            s.userId,
+        //            s.studentName,
+        //            avgScore = Math.Round(s.avgScore, 2),
+        //            s.experimentsCompleted,
+        //            s.classroomName,
+        //            reason = s.experimentsCompleted == 0 ? "No activity" : "Low score"
+        //        })
+        //        .ToList();
+
+        //    return Ok(new
+        //    {
+        //        totalStudents = studentIds.Count,
+        //        totalClasses = classroomIds.Count,
+        //        totalIlsCreated,
+        //        totalAssignments,
+        //        avgClassScore,
+        //        experimentsCompleted,
+        //        activeStudentsThisWeek,
+        //        pendingToGrade,
+        //        topPerforming,
+        //        atRisk
+        //    });
+        //}
+
         [HttpGet("overview")]
         public async Task<IActionResult> Overview(CancellationToken ct)
         {
-            var teacherId = Me();
-            var classroomIds = await GetTeacherClassroomIdsAsync(teacherId, ct);
-            var studentIds = await GetStudentIdsAsync(classroomIds, ct);
-
-            var totalIlsCreated = await _db.InteractiveLearningSpaces.AsNoTracking()
-                .CountAsync(i => i.CreatedBy == teacherId, ct);
-
-            var totalAssignments = classroomIds.Count == 0 ? 0
-                : await _db.Assignments.AsNoTracking().CountAsync(a => classroomIds.Contains(a.ClassroomId), ct);
-
-            var assignmentIds = classroomIds.Count == 0 ? new List<Guid>()
-                : await _db.Assignments.AsNoTracking()
-                    .Where(a => classroomIds.Contains(a.ClassroomId))
-                    .Select(a => a.Id)
-                    .ToListAsync(ct);
-
-            var pendingToGrade = assignmentIds.Count == 0 ? 0
-                : await _db.Submissions.AsNoTracking()
-                    .CountAsync(s => assignmentIds.Contains(s.AssignmentId) && s.Status == SubmissionStatus.Submitted, ct);
-
-            var sessions = studentIds.Count == 0 ? new List<StudentIlsSession>()
-                : await _db.StudentIlsSessions.AsNoTracking()
-                    .Where(s => studentIds.Contains(s.StudentId))
-                    .Include(s => s.Assessment)
-                    .ToListAsync(ct);
-
-            var experimentsCompleted = sessions.Count(s => s.CompletedAt != null);
-
-            var scores = sessions.Where(s => s.Assessment != null).Select(s => (double)s.Assessment!.Score * 100.0).ToList();
-            var avgClassScore = scores.Count == 0 ? 0.0 : Math.Round(scores.Average(), 2);
-
-            var weekAgo = DateTime.UtcNow.AddDays(-7);
-            var activeStudentsThisWeek = sessions
-                .Where(s => s.UpdatedAt >= weekAgo)
-                .Select(s => s.StudentId)
-                .Distinct()
-                .Count();
-
-            var names = studentIds.Count == 0 ? new Dictionary<Guid, string>()
-                : (await _db.Users.AsNoTracking().Where(u => studentIds.Contains(u.Id))
-                    .Select(u => new { u.Id, u.FullName }).ToListAsync(ct))
-                    .ToDictionary(x => x.Id, x => x.FullName);
-
-            var classroomNameByStudent = new Dictionary<Guid, string>();
-            if (classroomIds.Count > 0)
+            // Mock response payload with realistic classroom analytics
+            var overviewData = new
             {
-                var enrollRows = await _db.Enrollments.AsNoTracking()
-                    .Where(e => classroomIds.Contains(e.ClassroomId) && e.RoleInClass == ClassRole.Student)
-                    .Select(e => new { e.UserId, e.ClassroomId })
-                    .ToListAsync(ct);
-                var classNames = await _db.Classrooms.AsNoTracking()
-                    .Where(c => classroomIds.Contains(c.Id))
-                    .Select(c => new { c.Id, c.Name })
-                    .ToDictionaryAsync(c => c.Id, c => c.Name, ct);
-                foreach (var row in enrollRows)
-                    if (!classroomNameByStudent.ContainsKey(row.UserId) && classNames.TryGetValue(row.ClassroomId, out var cn))
-                        classroomNameByStudent[row.UserId] = cn;
+                totalStudents = 64,
+                totalClasses = 2,
+                totalIlsCreated = 8,
+                totalAssignments = 14,
+                avgClassScore = 78.45,
+                experimentsCompleted = 124,
+                activeStudentsThisWeek = 64,
+                pendingToGrade = 7,
+                topPerforming = new[]
+                {
+            new
+            {
+                userId = Guid.NewGuid(),
+                studentName = "Alex Johnson",
+                avgScore = 96.5,
+                experimentsCompleted = 12,
+                classroomName = "Grade 11 - Advanced Chemistry"
+            },
+            new
+            {
+                userId = Guid.NewGuid(),
+                studentName = "Sarah Williams",
+                avgScore = 93.8,
+                experimentsCompleted = 11,
+                classroomName = "Grade 11 - Advanced Chemistry"
+            },
+            new
+            {
+                userId = Guid.NewGuid(),
+                studentName = "Michael Brown",
+                avgScore = 89.2,
+                experimentsCompleted = 10,
+                classroomName = "Grade 10 - Physics Fundamentals"
+            },
+            new
+            {
+                userId = Guid.NewGuid(),
+                studentName = "Emily Davis",
+                avgScore = 87.0,
+                experimentsCompleted = 9,
+                classroomName = "Grade 10 - Physics Fundamentals"
+            },
+            new
+            {
+                userId = Guid.NewGuid(),
+                studentName = "David Miller",
+                avgScore = 85.4,
+                experimentsCompleted = 10,
+                classroomName = "Grade 11 - Advanced Chemistry"
             }
-
-            var perStudent = sessions
-                .GroupBy(s => s.StudentId)
-                .Select(g => new
+        },
+                atRisk = new[]
                 {
-                    userId = g.Key,
-                    studentName = names.TryGetValue(g.Key, out var n) ? n : "Unknown",
-                    avgScore = g.Where(s => s.Assessment != null).Select(s => (double)s.Assessment!.Score * 100.0).DefaultIfEmpty(0.0).Average(),
-                    experimentsCompleted = g.Count(s => s.CompletedAt != null),
-                    classroomName = classroomNameByStudent.TryGetValue(g.Key, out var cn2) ? cn2 : ""
-                })
-                .ToList();
-
-            var topPerforming = perStudent
-                .OrderByDescending(s => s.avgScore)
-                .Take(5)
-                .Select(s => new { s.userId, s.studentName, avgScore = Math.Round(s.avgScore, 2), s.experimentsCompleted, s.classroomName })
-                .ToList();
-
-            var atRisk = perStudent
-                .Where(s => s.experimentsCompleted == 0 || s.avgScore < 50.0)
-                .OrderBy(s => s.avgScore)
-                .Take(5)
-                .Select(s => new
-                {
-                    s.userId,
-                    s.studentName,
-                    avgScore = Math.Round(s.avgScore, 2),
-                    s.experimentsCompleted,
-                    s.classroomName,
-                    reason = s.experimentsCompleted == 0 ? "No activity" : "Low score"
-                })
-                .ToList();
-
-            return Ok(new
+            new
             {
-                totalStudents = studentIds.Count,
-                totalClasses = classroomIds.Count,
-                totalIlsCreated,
-                totalAssignments,
-                avgClassScore,
-                experimentsCompleted,
-                activeStudentsThisWeek,
-                pendingToGrade,
-                topPerforming,
-                atRisk
-            });
+                userId = Guid.NewGuid(),
+                studentName = "James Wilson",
+                avgScore = 42.0,
+                experimentsCompleted = 2,
+                classroomName = "Grade 10 - Physics Fundamentals",
+                reason = "Low score"
+            },
+            new
+            {
+                userId = Guid.NewGuid(),
+                studentName = "Olivia Taylor",
+                avgScore = 0.0,
+                experimentsCompleted = 0,
+                classroomName = "Grade 11 - Advanced Chemistry",
+                reason = "No activity"
+            },
+            new
+            {
+                userId = Guid.NewGuid(),
+                studentName = "Daniel Martinez",
+                avgScore = 48.5,
+                experimentsCompleted = 1,
+                classroomName = "Grade 10 - Physics Fundamentals",
+                reason = "Low score"
+            }
+        }
+            };
+
+            return await Task.FromResult(Ok(overviewData));
         }
 
         [HttpGet("performance-trends")]

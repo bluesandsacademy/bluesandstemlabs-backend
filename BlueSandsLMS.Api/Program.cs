@@ -56,6 +56,8 @@ builder.Services.AddHealthChecks().AddDbContextCheck<BlueSandsLMSDbContext>("dat
 
 builder.Services.AddScoped<IPhETImportService, PhETImportService>();
 builder.Services.AddScoped<IPhETSeedDataService, PhETSeedDataService>();
+// Register Excel upload service used by PhETController
+builder.Services.AddScoped<IExcelUploadService, ExcelUploadService>();
 
 builder.Services.AddSingleton<BlueSandsLMS.Common.Interfaces.IPraxiLabsService,
     BlueSandsLMS.Application.Services.PraxiLabsService>();
@@ -65,6 +67,9 @@ builder.Services.AddScoped<ISchoolService, SchoolService>();
 builder.Services.AddScoped<ISchoolService, SchoolService>();
 builder.Services.AddScoped<IPaymentsV2Repository, PaymentsV2Repository>();
 builder.Services.AddScoped<IPaymentsV2Service, PaymentsV2Service>();
+
+// Add the DI registration near other admin/service registrations:
+builder.Services.AddSingleton<BlueSandsLMS.Common.Interfaces.Admin.IHardcodedGlobalAdminProvider, BlueSandsLMS.Application.Services.Admin.HardcodedGlobalAdminProvider>();
 
 //builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 builder.Services.AddScoped<IEmailService, MailKitEmailService>();

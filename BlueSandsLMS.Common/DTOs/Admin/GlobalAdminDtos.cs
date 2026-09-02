@@ -299,4 +299,22 @@ public record SchoolDetailDto(
 public record SchoolQuery(string? Q = null, string? Country = null, bool? IsActive = null, int Page = 1, int PageSize = 20);
 
 
-
+public sealed record PromptTotalsDto(
+    int TotalPlatformUsers,
+    int TotalSchoolsRegistered,
+    int TotalStemCourses,
+    long TotalPayments,
+    int TotalLabPractice,
+    int TotalExperimentAttempts,
+    int TotalQuizAttempts,
+    double TotalQuizScorePercent,
+    int TotalILScreated,
+    int SubscribedUsers,
+    int ActiveUsers,
+    int MaleUsers,
+    int ActiveSubscriptions,
+    long PaymentRecorded,
+    int FemaleUsers,
+    int OfflineUsers,
+    DateTime GeneratedAtUtc
+);
