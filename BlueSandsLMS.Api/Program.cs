@@ -73,6 +73,7 @@ builder.Services.AddSingleton<BlueSandsLMS.Common.Interfaces.Admin.IHardcodedGlo
 
 //builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 builder.Services.AddScoped<IEmailService, MailKitEmailService>();
+builder.Services.AddScoped<IPlatformReportUploadService, PlatformReportUploadService>();
 
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ILeaderboardService, LeaderboardService>();

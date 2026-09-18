@@ -62,8 +62,9 @@ public DbSet<IndividualInquiry> IndividualInquiries { get; set; }
         public DbSet<SupportResource> SupportResources => Set<SupportResource>();
         public DbSet<Product> Products => Set<Product>();
         public DbSet<Order> Orders => Set<Order>();
+        public DbSet<PlatformReportRecord> PlatformReportRecords => Set<PlatformReportRecord>();
 
-         partial void OnModelCreatingStudentContent(ModelBuilder modelBuilder);
+        partial void OnModelCreatingStudentContent(ModelBuilder modelBuilder);
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

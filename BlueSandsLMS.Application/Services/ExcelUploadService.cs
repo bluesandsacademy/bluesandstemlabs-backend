@@ -67,6 +67,142 @@ public class ExcelUploadService : IExcelUploadService
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found in configuration.");
     }
 
+    //public async Task<int> UploadPhETExcelAsync(Stream fileStream)
+    //{
+    //    var simulations = new List<PhETSimulationExcelDTO>();
+
+    //    using (var package = new ExcelPackage(fileStream))
+    //    {
+    //        var worksheet = package.Workbook.Worksheets.Count > 3
+    //            ? package.Workbook.Worksheets[3]
+    //            : package.Workbook.Worksheets[0];
+
+    //        int rowCount = worksheet.Dimension.Rows;
+    //        int colCount = worksheet.Dimension.Columns;
+
+    //        // FIX: The header row is not always row 1 - this workbook has a leftover
+    //        // title/link row above the real headers. Scan for the row that actually
+    //        // contains "Title" and "Type" instead of assuming row 1.
+    //        int headerRow = FindHeaderRow(worksheet, rowCount, colCount);
+
+    //        // Build column map using alias resolution
+    //        var columnMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+    //        for (int col = 1; col <= colCount; col++)
+    //        {
+    //            var headerValue = worksheet.Cells[headerRow, col].Text?.Trim();
+    //            if (string.IsNullOrEmpty(headerValue)) continue;
+
+    //            var canonical = HeaderAliases.TryGetValue(headerValue, out var mapped) ? mapped : headerValue;
+    //            if (!columnMap.ContainsKey(canonical))
+    //                columnMap[canonical] = col;
+    //        }
+
+    //        // FIX: use the resolved Title column (not hardcoded col 1/2) to detect blank rows,
+    //        // and start reading data on the row right after the real header row.
+    //        columnMap.TryGetValue("Title", out int titleCol);
+    //        columnMap.TryGetValue("Type", out int typeCol);
+
+    //        for (int row = headerRow + 1; row <= rowCount; row++)
+    //        {
+    //            bool titleEmpty = titleCol == 0 || string.IsNullOrWhiteSpace(worksheet.Cells[row, titleCol].Text);
+    //            bool typeEmpty = typeCol == 0 || string.IsNullOrWhiteSpace(worksheet.Cells[row, typeCol].Text);
+    //            if (titleEmpty && typeEmpty)
+    //                continue;
+
+    //            var title = GetValue<string>(worksheet, row, columnMap, "Title") ?? string.Empty;
+    //            var simPage = GetValue<string>(worksheet, row, columnMap, "SimPage");
+    //            var simString = GetValue<string>(worksheet, row, columnMap, "SimString");
+
+    //            // Generate a unique SimulationUrl if not provided in the Excel file.
+    //            // The DB has a unique index on SimulationUrl, so empty/null will cause duplicates.
+    //            var simulationUrl = GetValue<string>(worksheet, row, columnMap, "SimulationUrl");
+    //            if (string.IsNullOrWhiteSpace(simulationUrl))
+    //            {
+    //                // Use SimPage if available, otherwise generate a unique URL from title
+    //                simulationUrl = !string.IsNullOrWhiteSpace(simPage)
+    //                    ? simPage
+    //                    : $"https://phet.colorado.edu/sims/{Uri.EscapeDataString(title.ToLowerInvariant().Replace(' ', '-'))}/{Guid.NewGuid():N}";
+    //            }
+
+    //            // FIX: this workbook has no "Topic" column at all, only "Main Topics".
+    //            // Fall back to MainTopics so Topic isn't always an empty string.
+    //            // NOTE: confirm this is the mapping you want.
+    //            var topic = GetValue<string>(worksheet, row, columnMap, "Topic");
+    //            if (string.IsNullOrWhiteSpace(topic))
+    //                topic = GetValue<string>(worksheet, row, columnMap, "MainTopics") ?? string.Empty;
+
+    //            var sim = new PhETSimulationExcelDTO
+    //            {
+    //                Id = Guid.NewGuid(),
+    //                Title = title,
+    //                SimulationUrl = simulationUrl,
+    //                ThumbnailUrl = GetValue<string>(worksheet, row, columnMap, "ThumbnailUrl")
+    //     ?? GetValue<string>(worksheet, row, columnMap, "PreviewImage"),
+    //                Topic = topic,
+    //                Description = GetValue<string>(worksheet, row, columnMap, "Description")
+    //     ?? GetValue<string>(worksheet, row, columnMap, "OverviewText"),
+    //                LearningGoals = GetValue<string>(worksheet, row, columnMap, "LearningGoals")
+    //     ?? GetValue<string>(worksheet, row, columnMap, "LearningObjectives"),
+    //                GradeLevel = GetValue<string>(worksheet, row, columnMap, "GradeLevel")
+    //     ?? GetValue<string>(worksheet, row, columnMap, "TargetGradeBand"),
+    //                Standards = GetValue<string>(worksheet, row, columnMap, "Standards")
+    //     ?? GetValue<string>(worksheet, row, columnMap, "CurriculumStandards"),
+    //                Keywords = GetValue<string>(worksheet, row, columnMap, "Keywords")
+    //     ?? GetValue<string>(worksheet, row, columnMap, "SearchTerms"),
+    //                IsActive = true,
+    //                DateCreated = DateTime.UtcNow,
+    //                LastUpdated = null,
+    //                Type = GetValue<string>(worksheet, row, columnMap, "Type")
+    //     ?? GetValue<string>(worksheet, row, columnMap, "ResourceFormat"),
+    //                NumberOfScreens = GetValue<int?>(worksheet, row, columnMap, "NumberOfScreens")
+    //     ?? GetValue<int?>(worksheet, row, columnMap, "ScreenCount"),
+    //                ScreenNames = GetValue<string>(worksheet, row, columnMap, "ScreenNames")
+    //     ?? GetValue<string>(worksheet, row, columnMap, "AvailableScreens"),
+    //                SimPage = simPage,
+    //                SimString = simString,
+    //                TeacherTipsDoc = GetValue<string>(worksheet, row, columnMap, "TeacherTipsDoc")
+    //     ?? GetValue<string>(worksheet, row, columnMap, "InstructorGuide"),
+    //                PdfUrl = GetValue<string>(worksheet, row, columnMap, "PdfUrl")
+    //     ?? GetValue<string>(worksheet, row, columnMap, "GuideDocumentUrl"),
+    //                RunnableResource = GetValue<string>(worksheet, row, columnMap, "RunnableResource")
+    //     ?? GetValue<string>(worksheet, row, columnMap, "ExecutionResource"),
+    //                CheerpJRunnable = GetValue<string>(worksheet, row, columnMap, "CheerpJRunnable")
+    //     ?? GetValue<string>(worksheet, row, columnMap, "LegacyRuntimeUrl"),
+    //                Filename = GetValue<string>(worksheet, row, columnMap, "Filename")
+    //     ?? GetValue<string>(worksheet, row, columnMap, "ResourceFileName"),
+    //                Physics = GetBoolValue(worksheet, row, columnMap, "Physics")
+    //     || GetBoolValue(worksheet, row, columnMap, "SupportsPhysics"),
+    //                MathStatistics = GetBoolValue(worksheet, row, columnMap, "MathStatistics")
+    //     || GetBoolValue(worksheet, row, columnMap, "SupportsMathematics"),
+    //                Chemistry = GetBoolValue(worksheet, row, columnMap, "Chemistry")
+    //     || GetBoolValue(worksheet, row, columnMap, "SupportsChemistry"),
+    //                EarthSpace = GetBoolValue(worksheet, row, columnMap, "EarthSpace")
+    //     || GetBoolValue(worksheet, row, columnMap, "SupportsEarthScience"),
+    //                Biology = GetBoolValue(worksheet, row, columnMap, "Biology")
+    //     || GetBoolValue(worksheet, row, columnMap, "SupportsBiology"),
+    //                LowGradeLevel = GetValue<string>(worksheet, row, columnMap, "LowGradeLevel")
+    //     ?? GetValue<string>(worksheet, row, columnMap, "MinimumGradeBand"),
+    //                HighGradeLevel = GetValue<string>(worksheet, row, columnMap, "HighGradeLevel")
+    //     ?? GetValue<string>(worksheet, row, columnMap, "MaximumGradeBand"),
+    //                MainTopics = GetValue<string>(worksheet, row, columnMap, "MainTopics")
+    //     ?? GetValue<string>(worksheet, row, columnMap, "PrimaryConcepts"),
+    //                SampleLearningGoals = GetValue<string>(worksheet, row, columnMap, "SampleLearningGoals")
+    //     ?? GetValue<string>(worksheet, row, columnMap, "ExampleObjectives"),
+    //                Translations = GetValue<string>(worksheet, row, columnMap, "Translations")
+    //     ?? GetValue<string>(worksheet, row, columnMap, "SupportedLanguages"),
+    //                Published = GetValue<string>(worksheet, row, columnMap, "Published")
+    //     ?? GetValue<string>(worksheet, row, columnMap, "PublicationDate"),
+    //                IsFree = true
+    //            };
+
+    //            simulations.Add(sim);
+    //        }
+    //    }
+
+    //    return await SaveToDatabaseAsync(simulations);
+    //}
+
+
     public async Task<int> UploadPhETExcelAsync(Stream fileStream)
     {
         var simulations = new List<PhETSimulationExcelDTO>();
@@ -80,9 +216,7 @@ public class ExcelUploadService : IExcelUploadService
             int rowCount = worksheet.Dimension.Rows;
             int colCount = worksheet.Dimension.Columns;
 
-            // FIX: The header row is not always row 1 - this workbook has a leftover
-            // title/link row above the real headers. Scan for the row that actually
-            // contains "Title" and "Type" instead of assuming row 1.
+            // Find the header row
             int headerRow = FindHeaderRow(worksheet, rowCount, colCount);
 
             // Build column map using alias resolution
@@ -97,8 +231,6 @@ public class ExcelUploadService : IExcelUploadService
                     columnMap[canonical] = col;
             }
 
-            // FIX: use the resolved Title column (not hardcoded col 1/2) to detect blank rows,
-            // and start reading data on the row right after the real header row.
             columnMap.TryGetValue("Title", out int titleCol);
             columnMap.TryGetValue("Type", out int typeCol);
 
@@ -113,23 +245,59 @@ public class ExcelUploadService : IExcelUploadService
                 var simPage = GetValue<string>(worksheet, row, columnMap, "SimPage");
                 var simString = GetValue<string>(worksheet, row, columnMap, "SimString");
 
-                // Generate a unique SimulationUrl if not provided in the Excel file.
-                // The DB has a unique index on SimulationUrl, so empty/null will cause duplicates.
                 var simulationUrl = GetValue<string>(worksheet, row, columnMap, "SimulationUrl");
                 if (string.IsNullOrWhiteSpace(simulationUrl))
                 {
-                    // Use SimPage if available, otherwise generate a unique URL from title
                     simulationUrl = !string.IsNullOrWhiteSpace(simPage)
                         ? simPage
                         : $"https://phet.colorado.edu/sims/{Uri.EscapeDataString(title.ToLowerInvariant().Replace(' ', '-'))}/{Guid.NewGuid():N}";
                 }
 
-                // FIX: this workbook has no "Topic" column at all, only "Main Topics".
-                // Fall back to MainTopics so Topic isn't always an empty string.
-                // NOTE: confirm this is the mapping you want.
                 var topic = GetValue<string>(worksheet, row, columnMap, "Topic");
                 if (string.IsNullOrWhiteSpace(topic))
                     topic = GetValue<string>(worksheet, row, columnMap, "MainTopics") ?? string.Empty;
+
+                // Get and truncate Translations if needed (database column max length)
+                var translations = GetValue<string>(worksheet, row, columnMap, "Translations")
+                    ?? GetValue<string>(worksheet, row, columnMap, "SupportedLanguages")
+                    ?? string.Empty;
+
+                // Truncate translations to 2000 characters if the DB column is NVARCHAR(2000)
+                // Adjust the max length based on your actual column definition
+                const int maxTranslationsLength = 2000;
+                if (translations.Length > maxTranslationsLength)
+                {
+                    // Truncate at the last complete language entry
+                    var truncated = translations.Substring(0, maxTranslationsLength - 50);
+                    var lastSemicolon = truncated.LastIndexOf(';');
+                    if (lastSemicolon > 0)
+                    {
+                        translations = truncated.Substring(0, lastSemicolon + 1) + "... (truncated)";
+                    }
+                    else
+                    {
+                        translations = truncated + "... (truncated)";
+                    }
+                }
+
+                // Also truncate other potentially long fields
+                var description = GetValue<string>(worksheet, row, columnMap, "Description")
+                    ?? GetValue<string>(worksheet, row, columnMap, "OverviewText")
+                    ?? string.Empty;
+                if (description.Length > 4000)
+                    description = description.Substring(0, 3997) + "...";
+
+                var learningGoals = GetValue<string>(worksheet, row, columnMap, "LearningGoals")
+                    ?? GetValue<string>(worksheet, row, columnMap, "LearningObjectives")
+                    ?? string.Empty;
+                if (learningGoals.Length > 4000)
+                    learningGoals = learningGoals.Substring(0, 3997) + "...";
+
+                var teacherTipsDoc = GetValue<string>(worksheet, row, columnMap, "TeacherTipsDoc")
+                    ?? GetValue<string>(worksheet, row, columnMap, "InstructorGuide")
+                    ?? string.Empty;
+                if (teacherTipsDoc.Length > 2000)
+                    teacherTipsDoc = teacherTipsDoc.Substring(0, 1997) + "...";
 
                 var sim = new PhETSimulationExcelDTO
                 {
@@ -137,61 +305,57 @@ public class ExcelUploadService : IExcelUploadService
                     Title = title,
                     SimulationUrl = simulationUrl,
                     ThumbnailUrl = GetValue<string>(worksheet, row, columnMap, "ThumbnailUrl")
-         ?? GetValue<string>(worksheet, row, columnMap, "PreviewImage"),
+                        ?? GetValue<string>(worksheet, row, columnMap, "PreviewImage"),
                     Topic = topic,
-                    Description = GetValue<string>(worksheet, row, columnMap, "Description")
-         ?? GetValue<string>(worksheet, row, columnMap, "OverviewText"),
-                    LearningGoals = GetValue<string>(worksheet, row, columnMap, "LearningGoals")
-         ?? GetValue<string>(worksheet, row, columnMap, "LearningObjectives"),
+                    Description = description,
+                    LearningGoals = learningGoals,
                     GradeLevel = GetValue<string>(worksheet, row, columnMap, "GradeLevel")
-         ?? GetValue<string>(worksheet, row, columnMap, "TargetGradeBand"),
+                        ?? GetValue<string>(worksheet, row, columnMap, "TargetGradeBand"),
                     Standards = GetValue<string>(worksheet, row, columnMap, "Standards")
-         ?? GetValue<string>(worksheet, row, columnMap, "CurriculumStandards"),
+                        ?? GetValue<string>(worksheet, row, columnMap, "CurriculumStandards"),
                     Keywords = GetValue<string>(worksheet, row, columnMap, "Keywords")
-         ?? GetValue<string>(worksheet, row, columnMap, "SearchTerms"),
+                        ?? GetValue<string>(worksheet, row, columnMap, "SearchTerms"),
                     IsActive = true,
                     DateCreated = DateTime.UtcNow,
                     LastUpdated = null,
                     Type = GetValue<string>(worksheet, row, columnMap, "Type")
-         ?? GetValue<string>(worksheet, row, columnMap, "ResourceFormat"),
+                        ?? GetValue<string>(worksheet, row, columnMap, "ResourceFormat"),
                     NumberOfScreens = GetValue<int?>(worksheet, row, columnMap, "NumberOfScreens")
-         ?? GetValue<int?>(worksheet, row, columnMap, "ScreenCount"),
+                        ?? GetValue<int?>(worksheet, row, columnMap, "ScreenCount"),
                     ScreenNames = GetValue<string>(worksheet, row, columnMap, "ScreenNames")
-         ?? GetValue<string>(worksheet, row, columnMap, "AvailableScreens"),
+                        ?? GetValue<string>(worksheet, row, columnMap, "AvailableScreens"),
                     SimPage = simPage,
                     SimString = simString,
-                    TeacherTipsDoc = GetValue<string>(worksheet, row, columnMap, "TeacherTipsDoc")
-         ?? GetValue<string>(worksheet, row, columnMap, "InstructorGuide"),
+                    TeacherTipsDoc = teacherTipsDoc,
                     PdfUrl = GetValue<string>(worksheet, row, columnMap, "PdfUrl")
-         ?? GetValue<string>(worksheet, row, columnMap, "GuideDocumentUrl"),
+                        ?? GetValue<string>(worksheet, row, columnMap, "GuideDocumentUrl"),
                     RunnableResource = GetValue<string>(worksheet, row, columnMap, "RunnableResource")
-         ?? GetValue<string>(worksheet, row, columnMap, "ExecutionResource"),
+                        ?? GetValue<string>(worksheet, row, columnMap, "ExecutionResource"),
                     CheerpJRunnable = GetValue<string>(worksheet, row, columnMap, "CheerpJRunnable")
-         ?? GetValue<string>(worksheet, row, columnMap, "LegacyRuntimeUrl"),
+                        ?? GetValue<string>(worksheet, row, columnMap, "LegacyRuntimeUrl"),
                     Filename = GetValue<string>(worksheet, row, columnMap, "Filename")
-         ?? GetValue<string>(worksheet, row, columnMap, "ResourceFileName"),
+                        ?? GetValue<string>(worksheet, row, columnMap, "ResourceFileName"),
                     Physics = GetBoolValue(worksheet, row, columnMap, "Physics")
-         || GetBoolValue(worksheet, row, columnMap, "SupportsPhysics"),
+                        || GetBoolValue(worksheet, row, columnMap, "SupportsPhysics"),
                     MathStatistics = GetBoolValue(worksheet, row, columnMap, "MathStatistics")
-         || GetBoolValue(worksheet, row, columnMap, "SupportsMathematics"),
+                        || GetBoolValue(worksheet, row, columnMap, "SupportsMathematics"),
                     Chemistry = GetBoolValue(worksheet, row, columnMap, "Chemistry")
-         || GetBoolValue(worksheet, row, columnMap, "SupportsChemistry"),
+                        || GetBoolValue(worksheet, row, columnMap, "SupportsChemistry"),
                     EarthSpace = GetBoolValue(worksheet, row, columnMap, "EarthSpace")
-         || GetBoolValue(worksheet, row, columnMap, "SupportsEarthScience"),
+                        || GetBoolValue(worksheet, row, columnMap, "SupportsEarthScience"),
                     Biology = GetBoolValue(worksheet, row, columnMap, "Biology")
-         || GetBoolValue(worksheet, row, columnMap, "SupportsBiology"),
+                        || GetBoolValue(worksheet, row, columnMap, "SupportsBiology"),
                     LowGradeLevel = GetValue<string>(worksheet, row, columnMap, "LowGradeLevel")
-         ?? GetValue<string>(worksheet, row, columnMap, "MinimumGradeBand"),
+                        ?? GetValue<string>(worksheet, row, columnMap, "MinimumGradeBand"),
                     HighGradeLevel = GetValue<string>(worksheet, row, columnMap, "HighGradeLevel")
-         ?? GetValue<string>(worksheet, row, columnMap, "MaximumGradeBand"),
+                        ?? GetValue<string>(worksheet, row, columnMap, "MaximumGradeBand"),
                     MainTopics = GetValue<string>(worksheet, row, columnMap, "MainTopics")
-         ?? GetValue<string>(worksheet, row, columnMap, "PrimaryConcepts"),
+                        ?? GetValue<string>(worksheet, row, columnMap, "PrimaryConcepts"),
                     SampleLearningGoals = GetValue<string>(worksheet, row, columnMap, "SampleLearningGoals")
-         ?? GetValue<string>(worksheet, row, columnMap, "ExampleObjectives"),
-                    Translations = GetValue<string>(worksheet, row, columnMap, "Translations")
-         ?? GetValue<string>(worksheet, row, columnMap, "SupportedLanguages"),
+                        ?? GetValue<string>(worksheet, row, columnMap, "ExampleObjectives"),
+                    Translations = translations,
                     Published = GetValue<string>(worksheet, row, columnMap, "Published")
-         ?? GetValue<string>(worksheet, row, columnMap, "PublicationDate"),
+                        ?? GetValue<string>(worksheet, row, columnMap, "PublicationDate"),
                     IsFree = true
                 };
 
@@ -200,6 +364,15 @@ public class ExcelUploadService : IExcelUploadService
         }
 
         return await SaveToDatabaseAsync(simulations);
+    }
+
+    // Helper method to safely truncate strings
+    private string TruncateString(string value, int maxLength, string suffix = "...")
+    {
+        if (string.IsNullOrEmpty(value) || value.Length <= maxLength)
+            return value;
+
+        return value.Substring(0, maxLength - suffix.Length) + suffix;
     }
 
     /// <summary>

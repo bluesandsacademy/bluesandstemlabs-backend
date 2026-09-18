@@ -15,7 +15,7 @@ int totalStudent,
 int ActiveSubscriptions,
 
 
-int TotalPayments,
+decimal TotalPayments,
 int TotalStemCourses,
 double TotalQuizScores,
 int TotalSubscribedUsers,

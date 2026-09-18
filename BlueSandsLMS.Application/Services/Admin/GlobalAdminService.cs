@@ -35,8 +35,22 @@ namespace BlueSandsLMS.Application.Services.Admin
             var since30 = nowUtc.AddDays(-30);
 
 
+            string studentRoleId = "AE17F104-0EC3-47E3-9517-0E7E2C3BE8B0";
+            string teacherRoleId = "D7C51101-D2A4-40D5-BB0A-BD97898CF847";
 
-            var totalUsers = await _db.Users.CountAsync(ct);
+            var maleUsers = await _db.Users
+                .CountAsync(u => u.RoleId.ToString() == studentRoleId && u.Gender != null && u.Gender == "Male", ct);
+
+            var femaleUsers = await _db.Users
+                .CountAsync(u => u.RoleId.ToString() == studentRoleId && u.Gender != null && u.Gender == "Female", ct);
+
+
+            var teachers = await _db.Users
+               .CountAsync(u => u.RoleId.ToString() == teacherRoleId, ct);
+
+
+            // var totalUsers = await _db.Users.CountAsync(ct);
+            var totalUsers = maleUsers + femaleUsers + teachers;
             var activeUsers30d = await _db.Users.CountAsync(u => u.LastLogin != null && u.LastLogin >= since30, ct);
             var totalSchools = await _db.Schools.CountAsync(ct);
             var experimentAttempts = await _db.ExperimentLaunches.LongCountAsync(ct);
@@ -46,10 +60,7 @@ namespace BlueSandsLMS.Application.Services.Admin
                                                        .SumAsync(p => (decimal?)p.Total, ct);
             var activeSubs = await _db.Subscriptions.CountAsync(s => s.Active, ct);
 
-
-            var maleUsers = await _db.Users.CountAsync(u => u.Gender != null && u.Gender.ToLower() == "male", ct);
-            var femaleUsers = await _db.Users.CountAsync(u => u.Gender != null && u.Gender.ToLower() == "female", ct);
-
+         
 
             var offlineUsers = await _db.ExperimentLaunches
                 .Where(e => e.Mode != null && e.Mode.ToLower() == "offline"
@@ -59,7 +70,7 @@ namespace BlueSandsLMS.Application.Services.Admin
                 .CountAsync(ct);
 
 
-            var totalPayments = await _db.Payments.CountAsync(p => p.Status == PaymentStatus.Paid, ct);
+            var totalPayments = await _db.Payments.Where(p => p.Status == PaymentStatus.Paid).SumAsync(p => p.Total, ct);
             var totalStemCourses = await _db.PhETSimulations.CountAsync(ct);
             var totalQuizScores = await _db.QuizAttempts.SumAsync(q => (double)q.Score0to1, ct);
             var totalIls = await _db.InteractiveLearningSpaces.CountAsync(ct);

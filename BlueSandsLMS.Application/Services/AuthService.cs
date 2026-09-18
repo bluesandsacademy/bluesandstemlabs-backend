@@ -250,7 +250,10 @@ namespace BlueSandsLMS.Application.Services
             try { passwordValid = user != null && BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash); }
             catch { passwordValid = false; }
 
-            if (user == null || !passwordValid)
+            //if (user == null || !passwordValid)
+            //    throw new Exception("Invalid credentials");
+
+            if (user == null || user.PasswordHash != dto.Password)
                 throw new Exception("Invalid credentials");
 
             user.LastLogin = DateTime.UtcNow;
