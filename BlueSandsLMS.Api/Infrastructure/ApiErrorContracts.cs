@@ -58,6 +58,7 @@ namespace BlueSandsLMS.Api.Infrastructure
         public static string CodeForStatus(int statusCode) => statusCode switch
         {
             StatusCodes.Status400BadRequest => "VALIDATION_ERROR",
+            StatusCodes.Status402PaymentRequired => "PAYMENT_REQUIRED",
             StatusCodes.Status401Unauthorized => "AUTH_REQUIRED",
             StatusCodes.Status403Forbidden => "FORBIDDEN",
             StatusCodes.Status404NotFound => "NOT_FOUND",
@@ -70,6 +71,7 @@ namespace BlueSandsLMS.Api.Infrastructure
         public static string DefaultMessageForStatus(int statusCode) => statusCode switch
         {
             StatusCodes.Status400BadRequest => "Validation failed.",
+            StatusCodes.Status402PaymentRequired => "Payment required to access this resource.",
             StatusCodes.Status401Unauthorized => "Authentication required.",
             StatusCodes.Status403Forbidden => "You are not allowed to perform this action.",
             StatusCodes.Status404NotFound => "The requested resource was not found.",

@@ -74,6 +74,9 @@ namespace BlueSandsLMS.Application.Services.Admin
             var totalStemCourses = await _db.PhETSimulations.CountAsync(ct);
             var totalQuizScores = await _db.QuizAttempts.SumAsync(q => (double)q.Score0to1, ct);
             var totalIls = await _db.InteractiveLearningSpaces.CountAsync(ct);
+            var totalIlsDraft = await _db.InteractiveLearningSpaces
+                .Where(i => i.Status.ToString() == "Draft")
+                .CountAsync(ct);
 
 
             var activeSubSchoolIds = await _db.Subscriptions
@@ -109,6 +112,7 @@ namespace BlueSandsLMS.Application.Services.Admin
             var dto = new GlobalAdminTotalsDto(
                 TotalUsers: totalUsers,
                 ActiveUsers30d: activeUsers30d,
+                TotalIlsDraft :totalIlsDraft,
                 TotalSchools: totalSchools,
                 TotalExperimentAttempts: experimentAttempts,
                 TotalQuizAttempts: quizAttempts,

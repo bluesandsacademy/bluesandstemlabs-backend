@@ -15,7 +15,7 @@ namespace BlueSandsLMS.Api.Controllers
 {
     [ApiController]
     [Route("api/ils")]
-    [Authorize]
+   [Authorize]
     public class IlsController : ControllerBase
     {
         private readonly BlueSandsLMSDbContext _db;
@@ -28,72 +28,112 @@ namespace BlueSandsLMS.Api.Controllers
             _logger = logger;
         }
 
+        //[HttpGet]
+        //[Authorize(Roles = "Teacher,Student,GlobalAdmin")]
+        //public async Task<IActionResult> List([FromQuery] Guid? classId, CancellationToken ct)
+        //{
+        //    var userId = CurrentUserId();
+        //    if (userId == Guid.Empty)
+        //        return Error(StatusCodes.Status401Unauthorized, "AUTH_REQUIRED", "Authentication required.");
+
+        //    if (classId.HasValue)
+        //    {
+        //        var hasClassAccess = await _db.Enrollments
+        //            .AnyAsync(
+        //                e => e.ClassroomId == classId.Value &&
+        //                     e.UserId == userId &&
+        //                     (e.RoleInClass == ClassRole.Teacher || e.RoleInClass == ClassRole.Student),
+        //                ct);
+        //        if (!hasClassAccess)
+        //            return Forbid();
+
+        //        var ilsIds = await GetIlsIdsForClassAsync(classId.Value, ct);
+        //        if (ilsIds.Count == 0)
+        //            return Ok(Array.Empty<IlsDetailsDto>());
+
+        //        var ilsList = await _db.InteractiveLearningSpaces
+        //            .Where(i => ilsIds.Contains(i.Id) && i.Status == IlsStatus.Published)
+        //            .Include(i => i.Tags).ThenInclude(t => t.Tag)
+        //            .ToListAsync(ct);
+
+        //        return Ok(ilsList.Select(Map));
+        //    }
+
+        //    if (User.IsInRole("Teacher"))
+        //    {
+        //        var mine = await _db.InteractiveLearningSpaces
+        //            .Where(i => i.CreatedBy == userId)
+        //            .Include(i => i.Tags).ThenInclude(t => t.Tag)
+        //            .ToListAsync(ct);
+
+        //        var teacherSchoolId = await _db.Users
+        //            .Where(u => u.Id == userId)
+        //            .Select(u => u.SchoolId)
+        //            .FirstOrDefaultAsync(ct);
+
+        //        var shared = new List<InteractiveLearningSpace>();
+        //        if (teacherSchoolId.HasValue)
+        //        {
+        //            shared = await _db.InteractiveLearningSpaces
+        //                .Where(i => i.SchoolId == teacherSchoolId && i.IsSharedWithSchool && i.CreatedBy != userId)
+        //                .Include(i => i.Tags).ThenInclude(t => t.Tag)
+        //                .ToListAsync(ct);
+        //        }
+
+        //        var combined = mine.Concat(shared).OrderByDescending(i => i.UpdatedAt).ToList();
+        //        return Ok(combined.Select(Map));
+        //    }
+
+        //    var studentIlsIds = await GetIlsIdsForStudentAsync(userId, ct);
+        //    if (studentIlsIds.Count == 0)
+        //        return Ok(Array.Empty<IlsDetailsDto>());
+
+        //    var assigned = await _db.InteractiveLearningSpaces
+        //        .Where(i => studentIlsIds.Contains(i.Id) && i.Status == IlsStatus.Published)
+        //        .Include(i => i.Tags).ThenInclude(t => t.Tag)
+        //        .ToListAsync(ct);
+
+        //    return Ok(assigned.Select(Map));
+        //}
+
         [HttpGet]
         [Authorize(Roles = "Teacher,Student,GlobalAdmin")]
-        public async Task<IActionResult> List([FromQuery] Guid? classId, CancellationToken ct)
+        public async Task<IActionResult> List([FromQuery] int page = 1, [FromQuery] int pageSize = 10, CancellationToken ct = default)
         {
             var userId = CurrentUserId();
             if (userId == Guid.Empty)
                 return Error(StatusCodes.Status401Unauthorized, "AUTH_REQUIRED", "Authentication required.");
 
-            if (classId.HasValue)
-            {
-                var hasClassAccess = await _db.Enrollments
-                    .AnyAsync(
-                        e => e.ClassroomId == classId.Value &&
-                             e.UserId == userId &&
-                             (e.RoleInClass == ClassRole.Teacher || e.RoleInClass == ClassRole.Student),
-                        ct);
-                if (!hasClassAccess)
-                    return Forbid();
+            // Ensure valid pagination parameters
+            if (page < 1) page = 1;
+            if (pageSize < 1) pageSize = 10;
+            if (pageSize > 100) pageSize = 100; // Optional safeguard cap
 
-                var ilsIds = await GetIlsIdsForClassAsync(classId.Value, ct);
-                if (ilsIds.Count == 0)
-                    return Ok(Array.Empty<IlsDetailsDto>());
-
-                var ilsList = await _db.InteractiveLearningSpaces
-                    .Where(i => ilsIds.Contains(i.Id) && i.Status == IlsStatus.Published)
-                    .Include(i => i.Tags).ThenInclude(t => t.Tag)
-                    .ToListAsync(ct);
-
-                return Ok(ilsList.Select(Map));
-            }
-
-            if (User.IsInRole("Teacher"))
-            {
-                var mine = await _db.InteractiveLearningSpaces
-                    .Where(i => i.CreatedBy == userId)
-                    .Include(i => i.Tags).ThenInclude(t => t.Tag)
-                    .ToListAsync(ct);
-
-                var teacherSchoolId = await _db.Users
-                    .Where(u => u.Id == userId)
-                    .Select(u => u.SchoolId)
-                    .FirstOrDefaultAsync(ct);
-
-                var shared = new List<InteractiveLearningSpace>();
-                if (teacherSchoolId.HasValue)
-                {
-                    shared = await _db.InteractiveLearningSpaces
-                        .Where(i => i.SchoolId == teacherSchoolId && i.IsSharedWithSchool && i.CreatedBy != userId)
-                        .Include(i => i.Tags).ThenInclude(t => t.Tag)
-                        .ToListAsync(ct);
-                }
-
-                var combined = mine.Concat(shared).OrderByDescending(i => i.UpdatedAt).ToList();
-                return Ok(combined.Select(Map));
-            }
-
-            var studentIlsIds = await GetIlsIdsForStudentAsync(userId, ct);
-            if (studentIlsIds.Count == 0)
-                return Ok(Array.Empty<IlsDetailsDto>());
-
-            var assigned = await _db.InteractiveLearningSpaces
-                .Where(i => studentIlsIds.Contains(i.Id) && i.Status == IlsStatus.Published)
+            // Base query without any filters
+            var query = _db.InteractiveLearningSpaces
                 .Include(i => i.Tags).ThenInclude(t => t.Tag)
+                .OrderByDescending(i => i.UpdatedAt);
+
+            // Get total count for pagination metadata
+            var totalCount = await query.CountAsync(ct);
+
+            // Apply paging
+            var items = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .ToListAsync(ct);
 
-            return Ok(assigned.Select(Map));
+            // Construct paginated response envelope
+            var pagedResult = new
+            {
+                Page = page,
+                PageSize = pageSize,
+                TotalCount = totalCount,
+                TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize),
+                Items = items.Select(Map).ToList()
+            };
+
+            return Ok(pagedResult);
         }
 
         [HttpGet("by-teacher/{teacherId:guid}")]

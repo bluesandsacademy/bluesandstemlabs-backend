@@ -17,6 +17,7 @@ int ActiveSubscriptions,
 
 decimal TotalPayments,
 int TotalStemCourses,
+int TotalIlsDraft,
 double TotalQuizScores,
 int TotalSubscribedUsers,
 int MaleUsers,

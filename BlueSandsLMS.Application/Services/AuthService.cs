@@ -192,7 +192,7 @@ namespace BlueSandsLMS.Application.Services
                 Id = Guid.NewGuid(),
                 FullName = dto.FullName,
                 Email = email,
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
+                PasswordHash = dto.Password,
                 RoleId = studentRole.Id,
                 IsActive = true,
                 DateCreated = DateTime.UtcNow,
@@ -245,13 +245,6 @@ namespace BlueSandsLMS.Application.Services
             var user = await _db.Users
                 .Include(u => u.Role)
                 .FirstOrDefaultAsync(u => u.Email == dto.Email && u.IsActive);
-
-            bool passwordValid;
-            try { passwordValid = user != null && BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash); }
-            catch { passwordValid = false; }
-
-            //if (user == null || !passwordValid)
-            //    throw new Exception("Invalid credentials");
 
             if (user == null || user.PasswordHash != dto.Password)
                 throw new Exception("Invalid credentials");
