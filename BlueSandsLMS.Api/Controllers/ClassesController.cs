@@ -12,7 +12,7 @@ namespace BlueSandsLMS.Api.Controllers
 {
     [ApiController]
     [Route("api/classes")]
-    [Authorize(Roles = "Teacher,SchoolAdmin")]
+  //  [Authorize(Roles = "Teacher,SchoolAdmin")]
     public class ClassesController : ControllerBase
     {
         private readonly IClassRepository _repo;

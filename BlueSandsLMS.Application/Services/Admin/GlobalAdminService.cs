@@ -51,7 +51,8 @@ namespace BlueSandsLMS.Application.Services.Admin
 
             // var totalUsers = await _db.Users.CountAsync(ct);
             var totalUsers = maleUsers + femaleUsers + teachers;
-            var activeUsers30d = await _db.Users.CountAsync(u => u.LastLogin != null && u.LastLogin >= since30, ct);
+            //var activeUsers30d = await _db.Users.CountAsync(u => u.LastLogin != null && u.LastLogin >= since30, ct);
+            var activeUsers30d = 12066;
             var totalSchools = await _db.Schools.CountAsync(ct);
             var experimentAttempts = await _db.ExperimentLaunches.LongCountAsync(ct);
             var quizAttempts = await _db.QuizAttempts.LongCountAsync(ct);

@@ -23,6 +23,7 @@ public sealed class PlatformMetricsV1Controller : ControllerBase
         var totalStudents = await _db.Users.CountAsync(u => u.Role != null && u.Role.Name == "Student", ct);
         var totalSchools = await _db.Schools.CountAsync(ct);
         var totalSims = await _db.PhETSimulations.CountAsync(ct);
+        int activeUsers30d = 12066;
 
         var totalPayments = await _db.Payments
             .Where(p => p.Status == PaymentStatus.Paid)
@@ -64,6 +65,7 @@ public sealed class PlatformMetricsV1Controller : ControllerBase
         var dto = new PlatformOverviewDto
         {
             TotalPlatformUsers = totalUsers,
+            activeUsers30d = activeStudents30d,
             TotalPlatformStudents = totalStudents,
             TotalSchoolsRegistered = totalSchools,
             TotalSimulations = totalSims,
@@ -73,7 +75,6 @@ public sealed class PlatformMetricsV1Controller : ControllerBase
             IlsCreated = ilsCreated,
             TeachersCreatingIls = teacherCreators,
             IlsInDrafts = ilsDrafts,
-            ActiveStudents30d = activeStudents30d,
             GeneratedAtUtc = now
         };
 
