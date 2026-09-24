@@ -56,7 +56,7 @@ namespace BlueSandsLMS.Application.Services.Student
         }
 
         if (!hasAccess)
-            throw new UnauthorizedAccessException(
+            throw new BlueSandsLMS.Common.Exceptions.SubscriptionRequiredException(
                 "This simulation requires an active subscription or free trial. " +
                 "Your trial may have expired — please contact your school administrator.");
     }

@@ -13,10 +13,9 @@ decimal TotalRevenueNGN,
 int totalTeachers,
 int totalStudent,
 int ActiveSubscriptions,
-
-
-int TotalPayments,
+decimal TotalPayments,
 int TotalStemCourses,
+int TotalIlsDraft,
 double TotalQuizScores,
 int TotalSubscribedUsers,
 int MaleUsers,

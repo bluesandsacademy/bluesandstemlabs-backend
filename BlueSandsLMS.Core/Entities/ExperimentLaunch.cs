@@ -8,7 +8,7 @@ namespace BlueSandsLMS.Core.Entities
         public Guid UserId { get; set; }
         public Guid? ClassroomId { get; set; }
 
-public Guid? PhETSimulationId { get; set; }
+        public Guid? PhETSimulationId { get; set; }
 
         public string Subject { get; set; } = "";
          public string ExperimentName { get; set; } = "";

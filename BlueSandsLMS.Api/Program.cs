@@ -32,6 +32,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using ISchoolAdminAnalytics = BlueSandsLMS.Common.Interfaces.Dashboard.ISchoolAdminService;
+using BlueSandsLMS.Common.Exceptions;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
@@ -73,6 +74,7 @@ builder.Services.AddSingleton<BlueSandsLMS.Common.Interfaces.Admin.IHardcodedGlo
 
 //builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 builder.Services.AddScoped<IEmailService, MailKitEmailService>();
+builder.Services.AddScoped<IPlatformReportUploadService, PlatformReportUploadService>();
 
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ILeaderboardService, LeaderboardService>();
@@ -364,6 +366,7 @@ app.UseExceptionHandler(errorApp =>
         var status = ex switch
         {
             ArgumentException or InvalidOperationException => StatusCodes.Status400BadRequest,
+            SubscriptionRequiredException => StatusCodes.Status402PaymentRequired,
             UnauthorizedAccessException => StatusCodes.Status403Forbidden,
             KeyNotFoundException => StatusCodes.Status404NotFound,
             _ => StatusCodes.Status500InternalServerError

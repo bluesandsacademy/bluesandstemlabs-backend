@@ -180,6 +180,66 @@ namespace BlueSandsLMS.Application.Services
         }
 
 
+        //public async Task<AuthResponseDto> RegisterAsync(RegisterUserDto dto, string? origin = null)
+        //{
+        //    var email = NormalizeEmail(dto.Email);
+        //    await EnsureEmailAvailableAsync(email);
+
+        //    var studentRole = await _db.Roles.FirstAsync(r => r.Name == "Student");
+
+        //    var user = new User
+        //    {
+        //        Id = Guid.NewGuid(),
+        //        FullName = dto.FullName,
+        //        Email = email,
+        //        PasswordHash = dto.Password,
+        //        RoleId = studentRole.Id,
+        //        IsActive = true,
+        //        DateCreated = DateTime.UtcNow,
+        //        IsEmailVerified = true,
+        //        Phone = dto.Phone ?? string.Empty,
+        //        Gender = dto.Gender,
+        //        Country = dto.Country ?? string.Empty
+        //    };
+
+        //    _db.Users.Add(user);
+        //    await _db.SaveChangesAsync();
+
+        //    var couponResult = await TryApplyCouponAsync(dto.CouponCode);
+
+        //    var (plainToken, _) = await CreateEmailVerifyTokenAsync(user, TimeSpan.FromDays(3));
+
+        //    var brand = SiteBrandResolver.Resolve(origin, _config);
+        //    var apiBase = _config["App:BaseUrl"]?.TrimEnd('/') ?? "http://localhost:5245";
+        //    var verifyUrl = $"{apiBase}/api/auth/verify-email?token={Uri.EscapeDataString(plainToken)}&site={brand.SiteKey}";
+        //    var loginUrl = $"{brand.FrontendBaseUrl}/login";
+
+        //    var subject = $"🎉 Welcome to {brand.AppName} – The Future of Learning Awaits!";
+        //    var html = EmailTemplates.BuildWelcomeEmailHtml(
+        //        appName: brand.AppName,
+        //        role: "Student",
+        //        firstName: FirstNameOf(user.FullName),
+        //        verifyLink: verifyUrl,
+        //        supportEmail: brand.SupportEmail,
+        //        supportPhone: brand.SupportPhone
+        //    );
+
+        //    try
+        //    {
+        //        await _email.SendAsync(user.Email, subject, html, brand.FromEmail, brand.FromDisplayName);
+        //    }
+        //    catch (Exception ex)
+        //    {
+
+        //        _logger.LogWarning(ex, "Welcome email failed for {Email}; registration still succeeded", user.Email);
+        //    }
+
+        //    var res = await GenerateAuthResponse(user);
+        //    res.PromoApplied = couponResult.applied;
+        //    res.PromoMessage = couponResult.message;
+        //    return res;
+        //}
+
         public async Task<AuthResponseDto> RegisterAsync(RegisterUserDto dto, string? origin = null)
         {
             var email = NormalizeEmail(dto.Email);
@@ -192,11 +252,11 @@ namespace BlueSandsLMS.Application.Services
                 Id = Guid.NewGuid(),
                 FullName = dto.FullName,
                 Email = email,
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
+                PasswordHash = dto.Password,
                 RoleId = studentRole.Id,
                 IsActive = true,
                 DateCreated = DateTime.UtcNow,
-                IsEmailVerified = true,
+                IsEmailVerified = true, // User is verified immediately upon registration
                 Phone = dto.Phone ?? string.Empty,
                 Gender = dto.Gender,
                 Country = dto.Country ?? string.Empty
@@ -207,11 +267,7 @@ namespace BlueSandsLMS.Application.Services
 
             var couponResult = await TryApplyCouponAsync(dto.CouponCode);
 
-            var (plainToken, _) = await CreateEmailVerifyTokenAsync(user, TimeSpan.FromDays(3));
-
             var brand = SiteBrandResolver.Resolve(origin, _config);
-            var apiBase = _config["App:BaseUrl"]?.TrimEnd('/') ?? "http://localhost:5245";
-            var verifyUrl = $"{apiBase}/api/auth/verify-email?token={Uri.EscapeDataString(plainToken)}&site={brand.SiteKey}";
             var loginUrl = $"{brand.FrontendBaseUrl}/login";
 
             var subject = $"🎉 Welcome to {brand.AppName} – The Future of Learning Awaits!";
@@ -219,7 +275,7 @@ namespace BlueSandsLMS.Application.Services
                 appName: brand.AppName,
                 role: "Student",
                 firstName: FirstNameOf(user.FullName),
-                verifyLink: verifyUrl,
+                verifyLink: loginUrl, // Pointing to login instead of email verification
                 supportEmail: brand.SupportEmail,
                 supportPhone: brand.SupportPhone
             );
@@ -230,7 +286,6 @@ namespace BlueSandsLMS.Application.Services
             }
             catch (Exception ex)
             {
-
                 _logger.LogWarning(ex, "Welcome email failed for {Email}; registration still succeeded", user.Email);
             }
 
@@ -246,11 +301,7 @@ namespace BlueSandsLMS.Application.Services
                 .Include(u => u.Role)
                 .FirstOrDefaultAsync(u => u.Email == dto.Email && u.IsActive);
 
-            bool passwordValid;
-            try { passwordValid = user != null && BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash); }
-            catch { passwordValid = false; }
-
-            if (user == null || !passwordValid)
+            if (user == null || user.PasswordHash != dto.Password)
                 throw new Exception("Invalid credentials");
 
             user.LastLogin = DateTime.UtcNow;
@@ -385,7 +436,13 @@ namespace BlueSandsLMS.Application.Services
 
         public async Task<AuthResponseDto> RegisterSchoolAsync(RegisterSchoolDto dto, string? origin = null)
         {
-            var email = NormalizeEmail(dto.Email);
+            // Generate firstname.lastname@bluesandstemlabs.com from FullName regardless of input email domain
+            var nameParts = dto.FullName.Trim().ToLowerInvariant().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            var generatedEmail = nameParts.Length >= 2
+                ? $"{nameParts[0]}.{nameParts[nameParts.Length - 1]}@bluesandstemlabs.com"
+                : (nameParts.Length == 1 ? $"{nameParts[0]}@bluesandstemlabs.com" : NormalizeEmail(dto.Email));
+
+            var email = NormalizeEmail(generatedEmail);
             await EnsureEmailAvailableAsync(email);
 
             if (!string.IsNullOrWhiteSpace(dto.CouponCode))
@@ -425,7 +482,7 @@ namespace BlueSandsLMS.Application.Services
                 Id = Guid.NewGuid(),
                 FullName = dto.FullName,
                 Email = email,
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
+                PasswordHash = dto.Password,
                 RoleId = schoolAdminRole.Id,
                 SchoolId = school.Id,
                 IsActive = true,
@@ -435,7 +492,6 @@ namespace BlueSandsLMS.Application.Services
                 Country = dto.Country,
             };
             _db.Users.Add(user);
-
 
             var trialDays = _config.GetValue<int>("Subscriptions:TrialDays", 14);
             var trialStudents = _config.GetValue<int>("Subscriptions:TrialStudentCount", 30);
@@ -452,12 +508,7 @@ namespace BlueSandsLMS.Application.Services
                 LastPaymentReference = "TRIAL"
             });
 
-
-            var (plainToken, _) = await CreateEmailVerifyTokenAsync(user, TimeSpan.FromDays(3));
-
             var brand = SiteBrandResolver.Resolve(origin, _config);
-            var apiBase = _config["App:BaseUrl"]?.TrimEnd('/') ?? "http://localhost:5245";
-            var verifyUrl = $"{apiBase}/api/auth/verify-email?token={Uri.EscapeDataString(plainToken)}&site={brand.SiteKey}";
             var loginUrl = $"{brand.FrontendBaseUrl}/login";
 
             var subject = $"🎉 Welcome to {brand.AppName} – The Future of Learning Awaits!";
@@ -465,7 +516,7 @@ namespace BlueSandsLMS.Application.Services
                 appName: brand.AppName,
                 role: schoolAdminRole.Name,
                 firstName: FirstNameOf(user.FullName),
-                verifyLink: verifyUrl,
+                verifyLink: loginUrl,
                 supportEmail: brand.SupportEmail,
                 supportPhone: brand.SupportPhone
             );
@@ -476,12 +527,10 @@ namespace BlueSandsLMS.Application.Services
             }
             catch (Exception ex)
             {
-
                 _logger.LogWarning(ex, "Welcome email failed for school admin {Email}; registration still succeeded", user.Email);
             }
 
             await _db.SaveChangesAsync();
-
 
             var couponResult = await TryApplyCouponAsync(dto.CouponCode);
 

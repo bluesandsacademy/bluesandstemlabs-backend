@@ -20,9 +20,9 @@ namespace BlueSandsLMS.Api.Controllers
         public async Task<ActionResult<GlobalAdminTotalsDto>> Totals(CancellationToken ct)
             => Ok(await _svc.GetTotalsAsync(ct));
 
-        [HttpGet("prompt-totals")]
-        public async Task<ActionResult<PromptTotalsDto>> PromptTotals(CancellationToken ct = default)
-            => Ok(await _hardcoded.GetPromptTotalsAsync(ct));
+        //[HttpGet("prompt-totals")]
+        //public async Task<ActionResult<PromptTotalsDto>> PromptTotals(CancellationToken ct = default)
+        //    => Ok(await _hardcoded.GetPromptTotalsAsync(ct));
 
         [HttpGet("growth")]
         public async Task<ActionResult<GrowthSeriesDto>> Growth([FromQuery] string metric = "users", [FromQuery] string period = "day", [FromQuery] int points = 30, CancellationToken ct = default)
