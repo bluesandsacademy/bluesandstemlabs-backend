@@ -3,6 +3,7 @@ using BlueSandsLMS.Infrastructure;
 using ClosedXML.Excel;
 using Google;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace BlueSandsLMS.Application.Services;
@@ -45,119 +46,134 @@ public class PlatformReportUploadService : IPlatformReportUploadService
         await file.CopyToAsync(memoryStream);
         memoryStream.Position = 0;
 
-        using var transaction = await _context.Database.BeginTransactionAsync();
-        try
-        {
-            using var workbook = new XLWorkbook(memoryStream);
-
-            if (!workbook.Worksheets.TryGetWorksheet(ExpectedSheetName, out var worksheet))
+            // Use the execution strategy to run the DB work inside a retriable unit
+            var strategy = _context.Database.CreateExecutionStrategy();
+            try
             {
-                result.Errors.Add($"Required worksheet '{ExpectedSheetName}' was not found in the workbook.");
-                return result;
-            }
+                using var workbook = new XLWorkbook(memoryStream);
 
-            var rows = worksheet.RowsUsed().Skip(1); // Skip header row
-            int rowNumber = 1;
-
-            foreach (var row in rows)
-            {
-                rowNumber++;
-                try
+                // Accept any worksheet name: use the first worksheet in the workbook if available
+                if (workbook.Worksheets.Count == 0)
                 {
-                    var cell = row.Cell(1);
-                    string reportDateString;
+                    result.Errors.Add("The uploaded workbook contains no worksheets.");
+                    return result;
+                }
 
-                    // Handle ClosedXML OADate (numeric excel serial date) or standard strings
-                    if (cell.DataType == XLDataType.DateTime)
+                var worksheet = workbook.Worksheets.First();
+
+                await strategy.ExecuteAsync(async () =>
+                {
+                    await using var transaction = await _context.Database.BeginTransactionAsync();
+                    try
                     {
-                        reportDateString = cell.GetDateTime().ToString("yyyy-MM-dd");
-                    }
-                    else if (cell.TryGetValue<double>(out double oaDate))
-                    {
-                        try
+                        var rows = worksheet.RowsUsed().Skip(1); // Skip header row
+                        int rowNumber = 1;
+
+                        foreach (var row in rows)
                         {
-                            reportDateString = DateTime.FromOADate(oaDate).ToString("yyyy-MM-dd");
-                        }
-                        catch
-                        {
-                            reportDateString = cell.Value.ToString()?.Trim();
-                        }
-                    }
-                    else
-                    {
-                        var rawVal = cell.Value.ToString()?.Trim();
-                        if (double.TryParse(rawVal, out double parsedDouble))
-                        {
+                            rowNumber++;
                             try
                             {
-                                reportDateString = DateTime.FromOADate(parsedDouble).ToString("yyyy-MM-dd");
+                                var cell = row.Cell(1);
+                                string reportDateString;
+
+                                // Handle ClosedXML OADate (numeric excel serial date) or standard strings
+                                if (cell.DataType == XLDataType.DateTime)
+                                {
+                                    reportDateString = cell.GetDateTime().ToString("yyyy-MM-dd");
+                                }
+                                else if (cell.TryGetValue<double>(out double oaDate))
+                                {
+                                    try
+                                    {
+                                        reportDateString = DateTime.FromOADate(oaDate).ToString("yyyy-MM-dd");
+                                    }
+                                    catch
+                                    {
+                                        reportDateString = cell.Value.ToString()?.Trim();
+                                    }
+                                }
+                                else
+                                {
+                                    var rawVal = cell.Value.ToString()?.Trim();
+                                    if (double.TryParse(rawVal, out double parsedDouble))
+                                    {
+                                        try
+                                        {
+                                            reportDateString = DateTime.FromOADate(parsedDouble).ToString("yyyy-MM-dd");
+                                        }
+                                        catch
+                                        {
+                                            reportDateString = rawVal;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        reportDateString = rawVal;
+                                    }
+                                }
+
+                                if (string.IsNullOrWhiteSpace(reportDateString))
+                                {
+                                    result.Errors.Add($"Row {rowNumber}: Invalid or missing date format.");
+                                    continue;
+                                }
+
+                                var record = new PlatformReportRecord
+                                {
+                                    ReportDate = reportDateString,
+                                    NewStudentsCount = ParseNullableInt(row.Cell(2).Value.ToString()),
+                                    MonthlyActiveStudents = ParseNullableInt(row.Cell(3).Value.ToString()),
+                                    CompletedExperimentsCount = ParseNullableInt(row.Cell(4).Value.ToString()),
+                                    NewTeachersReached = ParseNullableInt(row.Cell(5).Value.ToString()),
+                                    VirtualExperimentsConducted = ParseNullableInt(row.Cell(6).Value.ToString()),
+                                    MonthlyRetentionRate = row.Cell(7).Value.ToString(),
+                                    NewK12SchoolsReached = ParseNullableInt(row.Cell(8).Value.ToString()),
+                                    TeacherFeedbackEffectiveness = row.Cell(9).Value.ToString(),
+                                    TeacherFeedbackLessonPlanning = row.Cell(10).Value.ToString(),
+                                    TeachersCreatingIlsCount = ParseNullableInt(row.Cell(11).Value.ToString()),
+                                    IlsCreatedCount = ParseNullableInt(row.Cell(12).Value.ToString()),
+                                    IlsInDraftCount = ParseNullableInt(row.Cell(13).Value.ToString()),
+                                    StudentPerformancePrior = row.Cell(14).Value.ToString(),
+                                    StudentPerformanceFollowing = row.Cell(15).Value.ToString()
+                                };
+
+                                _context.PlatformReportRecords.Add(record);
+                                result.SuccessfulInserts++;
                             }
-                            catch
+                            catch (Exception ex)
                             {
-                                reportDateString = rawVal;
+                                _logger.LogError(ex, "Error processing row {RowNumber}", rowNumber);
+                                result.Errors.Add($"Row {rowNumber}: An unexpected error occurred while parsing data.");
                             }
+
+                            result.TotalRowsProcessed++;
                         }
-                        else
+
+                        if (result.Errors.Count > 0)
                         {
-                            reportDateString = rawVal;
+                            await transaction.RollbackAsync();
+                            result.Success = false;
+                            return;
                         }
+
+                        await _context.SaveChangesAsync();
+                        await transaction.CommitAsync();
+                        result.Success = true;
                     }
-
-                    if (string.IsNullOrWhiteSpace(reportDateString))
+                    catch
                     {
-                        result.Errors.Add($"Row {rowNumber}: Invalid or missing date format.");
-                        continue;
+                        await transaction.RollbackAsync();
+                        throw;
                     }
-
-                    var record = new PlatformReportRecord
-                    {
-                        ReportDate = reportDateString,
-                        NewStudentsCount = ParseNullableInt(row.Cell(2).Value.ToString()),
-                        MonthlyActiveStudents = ParseNullableInt(row.Cell(3).Value.ToString()),
-                        CompletedExperimentsCount = ParseNullableInt(row.Cell(4).Value.ToString()),
-                        NewTeachersReached = ParseNullableInt(row.Cell(5).Value.ToString()),
-                        VirtualExperimentsConducted = ParseNullableInt(row.Cell(6).Value.ToString()),
-                        MonthlyRetentionRate = row.Cell(7).Value.ToString(),
-                        NewK12SchoolsReached = ParseNullableInt(row.Cell(8).Value.ToString()),
-                        TeacherFeedbackEffectiveness = row.Cell(9).Value.ToString(),
-                        TeacherFeedbackLessonPlanning = row.Cell(10).Value.ToString(),
-                        TeachersCreatingIlsCount = ParseNullableInt(row.Cell(11).Value.ToString()),
-                        IlsCreatedCount = ParseNullableInt(row.Cell(12).Value.ToString()),
-                        IlsInDraftCount = ParseNullableInt(row.Cell(13).Value.ToString()),
-                        StudentPerformancePrior = row.Cell(14).Value.ToString(),
-                        StudentPerformanceFollowing = row.Cell(15).Value.ToString()
-                    };
-
-                    _context.PlatformReportRecords.Add(record);
-                    result.SuccessfulInserts++;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error processing row {RowNumber}", rowNumber);
-                    result.Errors.Add($"Row {rowNumber}: An unexpected error occurred while parsing data.");
-                }
-
-                result.TotalRowsProcessed++;
+                });
             }
-
-            if (result.Errors.Count > 0)
+            catch (Exception ex)
             {
-                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Critical error reading the Excel workbook or committing transaction.");
+                result.Errors.Add($"Critical processing error: {ex.Message}");
                 result.Success = false;
-                return result;
             }
-
-            await _context.SaveChangesAsync();
-            await transaction.CommitAsync();
-            result.Success = true;
-        }
-        catch (Exception ex)
-        {
-            await transaction.RollbackAsync();
-            _logger.LogError(ex, "Critical error reading the Excel workbook.");
-            result.Errors.Add($"Critical processing error: {ex.Message}");
-            result.Success = false;
-        }
 
         return result;
     }
